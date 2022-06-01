@@ -1,4 +1,4 @@
-module github.com/NamalSanjayaFernando/sonnet
+module github.com/NamalSanjaya/sonnet
 
 go 1.17
 

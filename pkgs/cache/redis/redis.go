@@ -1,30 +1,32 @@
-package cache
+package redis
 
 import (
 	"fmt"
 
-	redis "github.com/go-redis/redis/v7"
+	rds "github.com/go-redis/redis/v7"
 )
 
 type Config struct {
 	Host string
-	Port string
+	Port int
 	PassWord string
 	DB int
 }
 
 type client struct {
-	client *redis.Client
+	client *rds.Client
 }
 
-func NewClient(config Config) *client {
-	opt := &redis.Options{
-		Addr: fmt.Sprintf("%s:%s",config.Host,config.Port),
+var _ Interface = (*client)(nil)
+
+func NewClient(config *Config) *client {
+	opt := &rds.Options{
+		Addr: fmt.Sprintf("%s:%d",config.Host,config.Port),
 		Password: config.PassWord,
 		DB: config.DB,
 	}
 	return &client{
-		client: redis.NewClient(opt),
+		client: rds.NewClient(opt),
 	}
 }
 
@@ -38,4 +40,8 @@ func (rc *client) HGet(key, field string) (string, error) {
 
 func (rc *client) HDel(key string, fields ...string) error {
 	return rc.client.HDel(key, fields...).Err()
+}
+
+func (rc *client) HMGet(key string, fields ...string)([]interface{}, error) {
+	return rc.client.HMGet(key, fields...).Result()
 }

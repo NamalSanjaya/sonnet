@@ -1,4 +1,4 @@
-package cache
+package redis
 
 type Interface interface{
 	HSet(key, field, value string) error

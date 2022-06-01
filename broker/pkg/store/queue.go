@@ -2,19 +2,21 @@ package store
 
 
 type Interface interface {
-	Enqueue()
-	Dequeue()
+	Enqueue(task Task)
+	Dequeue() *Task
+	Len() int
+	IsEmpty() bool
 }
 
 type Queue struct {
 	store  []*Task
-	size   int
 }
 
-func NewQueue() Queue {
-	return Queue{
+var _ Interface = (*Queue)(nil)
+
+func NewQueue() *Queue {
+	return &Queue{
 		store: []*Task{},
-		size: 0,
 	}
 }
 
@@ -28,3 +30,10 @@ func (q *Queue) Dequeue() *Task {
 	return task
 }
 
+func (q *Queue) Len() int {
+	return len(q.store)
+}
+
+func (q *Queue) IsEmpty() bool {
+	return len(q.store) == 0 
+}
