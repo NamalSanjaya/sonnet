@@ -1,42 +1,40 @@
-package database
+package mssql
 
-// import (
-// 	"context"
-// 	"fmt"
-// 	"net/url"
+import (
+	"context"
+	"fmt"
+	"net/url"
 
-// 	"github.com/jmoiron/sqlx"
+	"github.com/jmoiron/sqlx"
 
-// )
+)
 
-// type DbClient struct { 
-// 	pool   *sqlx.DB
-// 	read   map[string]*sqlx.NamedStmt
-// 	update map[string]*sqlx.NamedStmt
-// }
+type Config struct {
+	Schema, Hostname, Database, Username, Password string
+	Port int
+}
 
-// func NewDBClient(ctx context.Context, dbConfig *cmtype.DbConfig) (*DbClient, error) {
-// 	params := url.Values{}
-// 	params.Add("database", dbConfig.Database)
+type Client struct { 
+	pool   *sqlx.DB
+	read   map[string]*sqlx.NamedStmt
+	update map[string]*sqlx.NamedStmt
+}
 
-// 	dataSrcUrl := &url.URL{
-// 		Scheme:   dbConfig.Schema,
-// 		User:     url.UserPassword(dbConfig.Username, dbConfig.Password),
-// 		Host:     fmt.Sprintf("%s:%d", dbConfig.Server, dbConfig.Port),
-// 		RawQuery: params.Encode(),
-// 	}
-// 	dbPool, err := sqlx.ConnectContext(ctx, "sqlserver", dataSrcUrl.String())
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	dbct := &DbClient{pool: dbPool, read: map[string]*sqlx.NamedStmt{}, update: map[string]*sqlx.NamedStmt{}}
+func NewClient(ctx context.Context, config *Config) *Client {
+	params := url.Values{}
+	params.Add("database", config.Database)
 
-// 	if err = dbct.prepareAllStmts(ctx); err != nil {
-// 		return nil, err
-// 	}
-// 	return dbct, nil
-// }
+	dataSrcUrl := &url.URL{
+		Scheme:   config.Schema,
+		User:     url.UserPassword(config.Username,config.Password),
+		Host:     fmt.Sprintf("%s:%d", config.Hostname,config.Port),
+		RawQuery: params.Encode(),
+	}
+	connPool, err := sqlx.ConnectContext(ctx, "sqlserver", dataSrcUrl.String())
+	if err != nil {
+		panic(err)
+	}
+	dbct := &Client{pool: connPool, read: map[string]*sqlx.NamedStmt{}, update: map[string]*sqlx.NamedStmt{}}
+	return dbct
+}
 
-// func (db *DbClient) prepareAllStmts(ctx context.Context) (err error) {
-// 	return nil
-// }
