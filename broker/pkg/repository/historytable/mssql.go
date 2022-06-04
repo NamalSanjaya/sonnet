@@ -2,9 +2,12 @@ package historytable
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/NamalSanjaya/sonnet/pkgs/database/mssql"
 )
+
+const insetMsgsQuery string = "INSERT INTO %s VALUES %s"
 
 type mssqlRepo struct {
 	client *mssql.Client
@@ -16,6 +19,8 @@ func NewRepo(ctx context.Context, config *mssql.Config) *mssqlRepo {
 	}
 }
 
-// we have think about which method is use when data type is NVARCHAR, binary data
-// file system base import
-// 10010000 1100101 01101100  01101100 01101111
+func (msr *mssqlRepo) InsetMsgs(ctx context.Context, histTb, dataStr string) error {
+	query := fmt.Sprintf(insetMsgsQuery, histTb, dataStr)
+	_, err := msr.client.Pool.ExecContext(ctx, query)
+	return err
+}

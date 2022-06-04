@@ -15,10 +15,12 @@ type Config struct {
 }
 
 type Client struct { 
-	pool   *sqlx.DB
-	read   map[string]*sqlx.NamedStmt
-	update map[string]*sqlx.NamedStmt
+	Pool   *sqlx.DB
+	Read   map[string]*sqlx.NamedStmt
+	Update map[string]*sqlx.NamedStmt
 }
+
+// max query size 64MB
 
 func NewClient(ctx context.Context, config *Config) *Client {
 	params := url.Values{}
@@ -34,7 +36,7 @@ func NewClient(ctx context.Context, config *Config) *Client {
 	if err != nil {
 		panic(err)
 	}
-	dbct := &Client{pool: connPool, read: map[string]*sqlx.NamedStmt{}, update: map[string]*sqlx.NamedStmt{}}
+	dbct := &Client{Pool: connPool, Read: map[string]*sqlx.NamedStmt{}, Update: map[string]*sqlx.NamedStmt{}}
 	return dbct
 }
 
