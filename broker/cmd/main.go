@@ -68,9 +68,6 @@ func main(){
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	router.GET("/ms-b/queue/len", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		fmt.Fprintf(w,"current len, %v",broker.Queue.Len())
-	})
 	fmt.Println("listening....localhost:8000")
 	log.Fatal(http.ListenAndServe("localhost:8000", router))
 }
