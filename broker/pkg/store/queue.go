@@ -2,29 +2,29 @@ package store
 
 
 type Interface interface {
-	Enqueue(task Task)
-	Dequeue() *Task
+	Enqueue(task string)
+	Dequeue() string
 	Len() int
 	IsEmpty() bool
 }
 
 type Queue struct {
-	store  []*Task
+	store  []string
 }
 
 var _ Interface = (*Queue)(nil)
 
 func NewQueue() *Queue {
 	return &Queue{
-		store: []*Task{},
+		store: []string{},
 	}
 }
 
-func (q *Queue) Enqueue(task Task) {
-	q.store = append(q.store, &task)
+func (q *Queue) Enqueue(task string) {
+	q.store = append(q.store, task)
 }
 
-func (q *Queue) Dequeue() *Task {
+func (q *Queue) Dequeue() string {
 	task := q.store[0]
 	q.store = q.store[1:]
 	return task

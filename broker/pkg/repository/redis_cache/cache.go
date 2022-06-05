@@ -44,8 +44,11 @@ func (r *redisRepo) GetAllMetadata(ctx context.Context, histTb string) (*HistTbM
 	if err != nil {
 		return nil, err
 	}
+	if len(rawdata) == 0 {
+		return nil, fmt.Errorf("unable to find history table with name %s", histTb)
+	}
 	if len(rawdata) != 6 {
-		return nil, fmt.Errorf("unexpected caching error in %s", histTb)
+		return nil, fmt.Errorf("partially cached metadata was found in DS2 for %s", histTb)
 	}
 	metadata.UserId = rawdata[0]
 	temp := []int{}
@@ -126,7 +129,7 @@ func (r *redisRepo) prepareMemoryRow(tmStamp, data, size string) *MemoryRow {
 	if err != nil {
 		return nil
 	}
-	sizeInt, err := strconv.Atoi(tmStamp)
+	sizeInt, err := strconv.Atoi(size)
 	if err != nil {
 		return &MemoryRow{Timestamp: timestampInt, Data: "", Size: 0}
 	}
@@ -158,7 +161,6 @@ func (r *redisRepo) RemoveMemRows(ctx context.Context, histTb string, lastDel, l
 func (r *redisRepo) LockMemory(ctx context.Context, histTb string) error {
 	lockCheckCount := 0
 	for lockCheckCount < maxNoLockChecks { // check 4s to lock the resources
-		fmt.Println("trying to lock ds2 ", lockCheckCount)
 		st, err := r.GetState(ctx, histTb)
 		if err != nil {
 			lockCheckCount++
@@ -181,9 +183,7 @@ func (r *redisRepo) LockMemory(ctx context.Context, histTb string) error {
 func (r *redisRepo) UnlockMemory(ctx context.Context, histTb string) error { 
 	tryUnlockCount := 0
 	for tryUnlockCount < maxNoLockChecks {
-		fmt.Println("try to unlock ", tryUnlockCount)
 		if unlockErr := r.unlock(ctx, histTb); unlockErr == nil {
-			fmt.Println("---operation succeeded..")
 			return nil
 		}
 		tryUnlockCount++
