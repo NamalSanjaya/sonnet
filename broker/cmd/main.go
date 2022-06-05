@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
+	lg "github.com/labstack/gommon/log"
 
 	histbrepo "github.com/NamalSanjaya/sonnet/broker/pkg/repository/historytable"
 	core "github.com/NamalSanjaya/sonnet/broker/pkg/service"
@@ -29,35 +30,47 @@ func main(){
 		Username: "SA", Password: "Test#123#test",Port: 1433,
 	}
 	router := httprouter.New()
-	queue := store.NewQueue()
+	queue  := store.NewQueue()
 
 	redisClient  := redis.NewClient(redisCfg)
-	redisRepo := redisrepo.NewRepo(redisClient)
+	redisRepo    := redisrepo.NewRepo(redisClient)
 
 	histRepo := histbrepo.NewRepo(ctx, dbCfg)
-
-	broker := core.New(redisRepo, queue, histRepo)
+    logger   := lg.New("sonnet-broker")
+	logger.EnableColor()
+	broker   := core.New(redisRepo, queue, histRepo, logger)
 	jobCtrlChan := make(chan int)
 	go broker.JobExec(ctx, jobCtrlChan)
 
-	router.GET("/ms-b/queue", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	router.PUT("/ms-b/queue", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Date","")
+		w.Header().Set("Content-Length","0")
+
+		if err := r.ParseForm(); err != nil {
+			logger.Error("unable to parse request body to get history name")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		histTbList := r.PostForm["historyTable"]
+		if len(histTbList) != 1{
+			logger.Info("Bad incoming request without historyTable field")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		preLenZero := false
 		if broker.Queue.IsEmpty() {
 			preLenZero = true
 		}
-		broker.Queue.Enqueue(store.Task{
-			TimeStamp: 1,
-			Type: "Store in DB",
-			OwnerHistTb: "af_hist1",
-		})
-
+		broker.Queue.Enqueue(histTbList[0])
 		if broker.Queue.Len() == 1 && preLenZero {
 			jobCtrlChan <- 1
 		}
-		fmt.Fprintf(w,"Queue length %v", broker.Queue.Len())
+		w.WriteHeader(http.StatusOK)
 	})
 	router.GET("/ms-b/queue/len", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		fmt.Fprintf(w,"current len, %v",broker.Queue.Len())
 	})
+	fmt.Println("listening....localhost:8000")
 	log.Fatal(http.ListenAndServe("localhost:8000", router))
 }
