@@ -11,11 +11,13 @@ import (
 	"github.com/NamalSanjaya/sonnet/broker/pkg/store"
 )
 
+
 type Core struct {
 	Cache redisrepo.Interface
 	Queue store.Interface
 	HistRepo histbrepo.Interface
 	Logger *lg.Logger
+	State string
 }
 
 func New(cache redisrepo.Interface, queue store.Interface, histtb histbrepo.Interface,logger *lg.Logger) *Core {
@@ -24,23 +26,34 @@ func New(cache redisrepo.Interface, queue store.Interface, histtb histbrepo.Inte
 		Queue: queue,
 		HistRepo: histtb,
 		Logger: logger,
+		State: "idle",
 	}
 }
 
-func (c *Core) JobExec(ctx context.Context, initChan chan int) {
+func (c *Core) JobExec(ctx context.Context, initChan, closeChan chan int) {
+	c.Logger.Info("Job Execution starts")
 	for {
-		num := <- initChan
-		switch num {
-		case 1:
-			c.exec(ctx)
-		default:
-			c.Logger.Warn("job execution went to unexpected state")
+		select{
+		case <-ctx.Done():
+			if c.State == "idle"{
+				c.Logger.Info("exit from Job Execution")
+				closeChan <- 1
+				return
+			} else {
+				c.State = "off"
+			}
+		case <- initChan:
+			c.State = "exec"
+			c.exec(ctx, closeChan)
+		case <- closeChan:
+			c.Logger.Info("exit from Job Execution")
+			return
 		}
 	}
 }
 
-func (c *Core) exec(ctx context.Context) {
-	for c.Queue.Len() > 0 {
+func (c *Core) exec(ctx context.Context, closeCh chan int) {
+	for c.Queue.Len() > 0 && c.State == "exec"{
 		histTb := c.Queue.Dequeue()
 		c.Logger.Infof("Memory cleaning starts for %s", histTb)
 		if mvErr := c.MoveMemoryRowsToDB(ctx, histTb); mvErr != nil {
@@ -52,6 +65,11 @@ func (c *Core) exec(ctx context.Context) {
 		}
 		c.Logger.Infof("Successfully clean redis-Memory block for %s", histTb)
 	}
+	if c.State == "off" {
+		closeCh <- 1
+		return
+	}
+	c.State = "idle"
 }
 
 func (c *Core) MoveMemoryRowsToDB(ctx context.Context, histTb string) error {
@@ -81,11 +99,18 @@ func (c *Core) MoveMemoryRowsToDB(ctx context.Context, histTb string) error {
 	if err = c.HistRepo.InsetMsgs(ctx, histTb, dataStr); err != nil {
 		return fmt.Errorf("msg insertion of %s to DB was failed due to %s", histTb, err.Error())
 	}
-	if err = c.Cache.RemoveMemRows(ctx, histTb, metadata.LastDeleted, metadata.LastRead); err != nil {
+	var totalRemovedSz int
+	if totalRemovedSz, err = c.Cache.RemoveMemRows(ctx, histTb, metadata.LastDeleted, metadata.LastRead); err != nil {
 		return fmt.Errorf("unable to remove memory rows of %s which are already moved to DB due to, %s", histTb, err.Error())
 	}
 	if err = c.Cache.SetLastDel(ctx, histTb, metadata.LastRead); err != nil {
 		return fmt.Errorf("falied to set `lastdeleted` metadata of %s correctly due to, %s", histTb, err.Error())
+	}
+	if metadata.MemSize - totalRemovedSz < 0 {
+		return fmt.Errorf("memory block size can't be a negative value for %s", histTb)
+	}
+	if err = c.Cache.SetMemSize(ctx, histTb, metadata.MemSize - totalRemovedSz); err != nil {
+		return fmt.Errorf("unable to set metadata of %s correctly due to, %s", histTb, err.Error())
 	}
 	return c.Cache.UnlockMemory(ctx, histTb)
 }

@@ -2,35 +2,40 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
-	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	"github.com/julienschmidt/httprouter"
 	lg "github.com/labstack/gommon/log"
 
 	histbrepo "github.com/NamalSanjaya/sonnet/broker/pkg/repository/historytable"
+	redisrepo "github.com/NamalSanjaya/sonnet/broker/pkg/repository/redis_cache"
 	core "github.com/NamalSanjaya/sonnet/broker/pkg/service"
 	"github.com/NamalSanjaya/sonnet/broker/pkg/store"
 	"github.com/NamalSanjaya/sonnet/pkgs/cache/redis"
 	ms "github.com/NamalSanjaya/sonnet/pkgs/database/mssql"
-	redisrepo "github.com/NamalSanjaya/sonnet/broker/pkg/repository/redis_cache"
 )
 
+const memCleanerInterval time.Duration = time.Second * 50
+const maxSpaceSize int = 2048    // 2kB
+
 func main(){
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 	redisCfg := &redis.Config{
 		Host: "localhost",
 		Port: 6379,
-		PassWord: "",
+		PassWord: "--",
 		DB: 0,
 	}
 	dbCfg := &ms.Config{
-		Schema: "sqlserver", Hostname: "localhost", Database: "sonnet",
-		Username: "SA", Password: "Test#123#test",Port: 1433,
+		Schema: "sqlserver", Hostname: "localhost", Database: "---",
+		Username: "--", Password: "---",Port: 1433,
 	}
-	router := httprouter.New()
+	stopSig := make(chan os.Signal, 1)
+	signal.Notify(stopSig, syscall.SIGINT, syscall.SIGTERM)
 	queue  := store.NewQueue()
+	ticker := time.NewTimer(memCleanerInterval)
 
 	redisClient  := redis.NewClient(redisCfg)
 	redisRepo    := redisrepo.NewRepo(redisClient)
@@ -40,34 +45,43 @@ func main(){
 	logger.EnableColor()
 	broker   := core.New(redisRepo, queue, histRepo, logger)
 	jobCtrlChan := make(chan int)
-	go broker.JobExec(ctx, jobCtrlChan)
+	shutDwnChan := make(chan int)
+	go broker.JobExec(ctx, jobCtrlChan, shutDwnChan)
 
-	router.PUT("/ms-b/queue", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.Header().Set("Date","")
-		w.Header().Set("Content-Length","0")
-
-		if err := r.ParseForm(); err != nil {
-			logger.Error("unable to parse request body to get history name")
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+	go func () {
+		logger.Info("starts redis-memory cleaner")
+		for {
+			select {
+			case <- ctx.Done():
+				logger.Info("exit from redis-memory cleaner")
+				return
+			case <- ticker.C:
+				histTbList, err := broker.Cache.ListHistTbs(ctx)
+				if err != nil {
+					logger.Errorf("error listing history tables to find space exceeded history tables, due to %s", err.Error())
+				} else {
+					for _, histTb := range histTbList {
+						metadata, err2 := broker.Cache.GetAllMetadata(ctx, histTb) // define a new method to get only `memsize`
+						if err2 != nil {
+							logger.Error(err2)
+							continue
+						}
+						if metadata.MemSize > maxSpaceSize {
+							isLenZero := broker.Queue.Len() == 0
+							broker.Queue.Enqueue(histTb)
+							if broker.Queue.Len() == 1 && isLenZero {
+								jobCtrlChan <- 1
+							}
+						}
+					}
+				}
+			}
 		}
-		histTbList := r.PostForm["historyTable"]
-		if len(histTbList) != 1{
-			logger.Info("Bad incoming request without historyTable field")
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		preLenZero := false
-		if broker.Queue.IsEmpty() {
-			preLenZero = true
-		}
-		broker.Queue.Enqueue(histTbList[0])
-		if broker.Queue.Len() == 1 && preLenZero {
-			jobCtrlChan <- 1
-		}
-		w.WriteHeader(http.StatusOK)
-	})
-	fmt.Println("listening....localhost:8000")
-	log.Fatal(http.ListenAndServe("localhost:8000", router))
+	}()
+	<- stopSig
+	cancel()
+	time.Sleep(time.Second * 2)
+	<- shutDwnChan
+	time.Sleep(time.Second * 2)
+	logger.Info("Broker gracefully shutting down")
 }

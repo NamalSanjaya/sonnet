@@ -16,6 +16,7 @@ const waitingTime time.Duration = time.Millisecond * 1200
 
 const PrefixDs2   string   = "ds2#"
 const PrefixMem   string   = "mem#"
+const RegHistTbs string = "RegHistoryTbs"
 
 const (
 	userid      string   = "userid"
@@ -88,6 +89,12 @@ func (r *redisRepo) SetLastDel(ctx context.Context, histTb string, lastDel int) 
 	return r.cmder.HSet(ctx, histTbKey, lastdeleted ,lastDelStr)
 }
 
+func (r *redisRepo) SetMemSize(ctx context.Context, histTb string, size int) error {
+	histTbKey := fmt.Sprintf("%s%s", PrefixDs2, histTb)
+	sizeStr := strconv.Itoa(size)
+	return r.cmder.HSet(ctx, histTbKey, memsize, sizeStr)
+}
+
 // `state` metadata, 0:lock  , 1: open
 func (r *redisRepo) lock(ctx context.Context, histTb string) error {
 	histTbKey := fmt.Sprintf("%s%s", PrefixDs2, histTb)
@@ -136,25 +143,46 @@ func (r *redisRepo) prepareMemoryRow(tmStamp, data, size string) *MemoryRow {
 	return &MemoryRow{Timestamp: timestampInt, Data: data, Size: sizeInt}
 }
 
-func (r *redisRepo) RemoveMemRows(ctx context.Context, histTb string, lastDel, lastRead int) error {
-	minScore := strconv.Itoa(lastDel)
-	maxScore := strconv.Itoa(lastRead)
-	histMemKey := fmt.Sprintf("%s%s",PrefixMem, histTb)
-	err := r.cmder.ZRemRangeByScore(ctx, histMemKey, minScore, maxScore)
+func (r *redisRepo) GetMemRowSize(ctx context.Context, histTb, tmstamp string) (int,error){
+	memRowKey := fmt.Sprintf("%s%s#%s",PrefixMem, histTb, tmstamp)
+	sz, err := r.cmder.LIndex(ctx, memRowKey, 1)
 	if err != nil {
-		return err
+		return -1, err
 	}
+	size, err := strconv.Atoi(sz)
+	if err != nil {
+		return -1, err
+	}
+	return size, nil
+}
+
+// return total removed memory size
+func (r *redisRepo) RemoveMemRows(ctx context.Context, histTb string, lastDel, lastRead int) (int, error) {
+	histMemKey := fmt.Sprintf("%s%s",PrefixMem, histTb)
+	maxScore := strconv.Itoa(lastRead)
 	minScoreExv := fmt.Sprintf("(%d", lastDel)
 	listTimeStamp, err := r.cmder.ZRangeByScore(ctx, histMemKey, minScoreExv, maxScore)
 	if err != nil {
-		return err
+		return 0, err
 	}
+	var totalDelSize int
+	var delSize int
 	for _, timestmp := range listTimeStamp {
+		delSize = 0
+		if delSize, err = r.GetMemRowSize(ctx, histTb, timestmp); err != nil {
+			return 0, err
+		}
+		totalDelSize += delSize
 		if err = r.cmder.Del(ctx, fmt.Sprintf("%s%s#%s", PrefixMem, histTb, timestmp)); err != nil {
-			return err
+			return 0, err
 		}
 	}
-	return nil
+	minScore := strconv.Itoa(lastDel)
+	err = r.cmder.ZRemRangeByScore(ctx, histMemKey, minScore, maxScore)
+	if err != nil {
+		return 0, err
+	}
+	return totalDelSize, nil
 }
 
 // lock ds2, so that memory can be safely use ( since implicity memory also lock)
@@ -190,4 +218,15 @@ func (r *redisRepo) UnlockMemory(ctx context.Context, histTb string) error {
 		time.Sleep(waitingTime)
 	}
 	return fmt.Errorf("unable to unlock ds2 & memory of %s", histTb)
+}
+
+func (r *redisRepo) ListHistTbs(ctx context.Context)([]string, error) {
+	key := fmt.Sprintf("%s%s", PrefixDs2, RegHistTbs)
+	return r.cmder.SMembers(ctx, key)
+}
+
+func (r *redisRepo) SetMemoryRowsSize(ctx context.Context,histTb string, sz int) error{
+	histTbKey := fmt.Sprintf("%s%s", PrefixDs2, histTb)
+	size := strconv.Itoa(sz)
+	return r.cmder.HSet(ctx, histTbKey, memsize , size)
 }
