@@ -1,30 +1,44 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
 
+	histbrepo "github.com/NamalSanjaya/sonnet/broker/pkg/repository/historytable"
+	core "github.com/NamalSanjaya/sonnet/broker/pkg/service"
 	"github.com/NamalSanjaya/sonnet/broker/pkg/store"
 	"github.com/NamalSanjaya/sonnet/pkgs/cache/redis"
-	core "github.com/NamalSanjaya/sonnet/broker/pkg/service"
+	ms "github.com/NamalSanjaya/sonnet/pkgs/database/mssql"
+	redisrepo "github.com/NamalSanjaya/sonnet/broker/pkg/repository/redis_cache"
 )
 
 func main(){
-	config := &redis.Config{
+	ctx := context.Background()
+	redisCfg := &redis.Config{
 		Host: "localhost",
 		Port: 6379,
 		PassWord: "",
 		DB: 0,
 	}
-	queue := store.NewQueue()
-	cache := redis.NewClient(config)
+	dbCfg := &ms.Config{
+		Schema: "sqlserver", Hostname: "localhost", Database: "sonnet",
+		Username: "SA", Password: "Test#123#test",Port: 1433,
+	}
 	router := httprouter.New()
-	broker := core.New(cache, queue)
+	queue := store.NewQueue()
+
+	redisClient  := redis.NewClient(redisCfg)
+	redisRepo := redisrepo.NewRepo(redisClient)
+
+	histRepo := histbrepo.NewRepo(ctx, dbCfg)
+
+	broker := core.New(redisRepo, queue, histRepo)
 	jobCtrlChan := make(chan int)
-	go broker.JobExec(jobCtrlChan)
+	go broker.JobExec(ctx, jobCtrlChan)
 
 	router.GET("/ms-b/queue", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		preLenZero := false
@@ -34,7 +48,7 @@ func main(){
 		broker.Queue.Enqueue(store.Task{
 			TimeStamp: 1,
 			Type: "Store in DB",
-			OwnerId: "u-11",
+			OwnerHistTb: "af_hist1",
 		})
 
 		if broker.Queue.Len() == 1 && preLenZero {

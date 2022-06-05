@@ -4,36 +4,32 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"time"
 
-	hstb "github.com/NamalSanjaya/sonnet/broker/pkg/repository/historytable"
-	rcache "github.com/NamalSanjaya/sonnet/broker/pkg/repository/redis_cache"
+	histbrepo "github.com/NamalSanjaya/sonnet/broker/pkg/repository/historytable"
+	redisrepo "github.com/NamalSanjaya/sonnet/broker/pkg/repository/redis_cache"
 	"github.com/NamalSanjaya/sonnet/broker/pkg/store"
 )
 
-// configuration parameters
-const maxNoLockChecks int = 5
-const waitingTime time.Duration = time.Millisecond * 800
-
 type Core struct {
-	Cache rcache.Interface
+	Cache redisrepo.Interface
 	Queue store.Interface
-	HistRepo hstb.Interface
+	HistRepo histbrepo.Interface
 }
 
-func New(cache rcache.Interface, queue store.Interface) *Core {
+func New(cache redisrepo.Interface, queue store.Interface, histtb histbrepo.Interface) *Core {
 	return &Core{
 		Cache: cache,
 		Queue: queue,
+		HistRepo: histtb,
 	}
 }
 
-func (c *Core) JobExec(initChan chan int) {
+func (c *Core) JobExec(ctx context.Context, initChan chan int) {
 	for {
 		num := <- initChan
 		switch num {
 		case 1:
-			c.exec()
+			c.exec(ctx)
 			fmt.Println("------ Job end ------")
 		case 2:
 			fmt.Println("error")
@@ -43,67 +39,54 @@ func (c *Core) JobExec(initChan chan int) {
 	}
 }
 
-func (c *Core) exec() {
+func (c *Core) exec(ctx context.Context) {
 	fmt.Println("------ Job start ------")
 	for c.Queue.Len() > 0 {
 		task := c.Queue.Dequeue()
-		fmt.Println("finished...now queue size: ", c.Queue.Len(), task.OwnerId)
+		if err := c.MoveMemoryRowsToDB(ctx, task.OwnerHistTb); err != nil {
+			fmt.Println(err.Error())
+		}
+		fmt.Println("finished...now queue size: ", c.Queue.Len(), task.OwnerHistTb)
 	}
 }
 
 func (c *Core) MoveMemoryRowsToDB(ctx context.Context, histTb string) error {
 	metadata, err := c.Cache.GetAllMetadata(ctx,histTb) 
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to get metadata in ds2 of %s due to, %s", histTb,err.Error())
 	}
-	lockCheckCount := 0
-	for lockCheckCount < maxNoLockChecks { // check 4s to lock the resources
-		st, err := c.Cache.GetState(ctx, histTb)
-		if err != nil {
-			lockCheckCount++
-			continue
-		} 
-		if st == 1 { // check current unlock state
-			if lockErr := c.Cache.Lock(ctx, histTb); lockErr == nil {
-				break
-			}
-		}
-		lockCheckCount++
-		time.Sleep(waitingTime)
-	}
-	if lockCheckCount == maxNoLockChecks {
-		return fmt.Errorf("unable to lock DS2 to remove memory rows in %s", histTb)
+	fmt.Println("fetch all metadata...")
+	if err := c.Cache.LockMemory(ctx, histTb); err != nil {
+		return fmt.Errorf("unable to lock ds2 of %s due to %s", histTb, err.Error())
 	}
 	memRows, err := c.Cache.ListMemoryRows(ctx, histTb, metadata.LastDeleted, metadata.LastRead)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to list memory rows of %s due to %s", histTb, err.Error())
 	}
+	if len(memRows) == 0{
+		log.Println("no memory rows are found to move to DB")
+		return nil
+	}
+	fmt.Println("list all memory rows..")
 	// creating query DB query
 	dataStr := ""
 	for i, memRow := range memRows {
 		if i == 0 {
-			dataStr = fmt.Sprintf("(%d,0x%s,%d)", memRow.Timestamp, memRow.Data, metadata.MemSize)
+			dataStr = fmt.Sprintf("(%d,0x%s,%d)", memRow.Timestamp, memRow.Data, memRow.Size)
 			continue
 		}
 		dataStr = dataStr + "," + fmt.Sprintf("(%d,0x%s,%d)", memRow.Timestamp, memRow.Data, metadata.MemSize)
 	}
 	if err = c.HistRepo.InsetMsgs(ctx, histTb, dataStr); err != nil {
-		return err
+		return fmt.Errorf("msg insertion of %s to DB was failed due to %s", histTb, err.Error())
 	}
+	fmt.Println("inserted msgs to db")
 	if err = c.Cache.RemoveMemRows(ctx, histTb, metadata.LastDeleted, metadata.LastRead); err != nil {
-		return err
+		return fmt.Errorf("unable to remove memory rows of %s which are already moved to DB due to, %s", histTb, err.Error())
 	}
+	fmt.Println("remove memory rows from redis-memory")
 	if err = c.Cache.SetLastDel(ctx, histTb, metadata.LastRead); err != nil {
-		return err
+		return fmt.Errorf("falied to set `lastdeleted` metadata of %s correctly due to, %s", histTb, err.Error())
 	}
-	tryUnlockCount := 0
-	for tryUnlockCount < maxNoLockChecks {
-		if unlockErr := c.Cache.Unlock(ctx, histTb); unlockErr == nil {
-			return nil
-		}
-		tryUnlockCount++
-		time.Sleep(waitingTime)
-	}
-	log.Printf("unable to unlock metadata in DS2 of %s own by userId %s\n", histTb, metadata.UserId)
-	return nil
+	return c.Cache.UnlockMemory(ctx, histTb)
 }

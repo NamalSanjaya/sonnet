@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	"github.com/jmoiron/sqlx"
+	_ "github.com/denisenkom/go-mssqldb"
 
 )
 
@@ -19,6 +20,8 @@ type Client struct {
 	Read   map[string]*sqlx.NamedStmt
 	Update map[string]*sqlx.NamedStmt
 }
+
+var _ Interface = (*Client)(nil)
 
 // max query size 64MB
 

@@ -5,9 +5,14 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/NamalSanjaya/sonnet/pkgs/cache/redis"
 )
+
+// configuration parameter
+const maxNoLockChecks int = 5
+const waitingTime time.Duration = time.Millisecond * 1200
 
 const PrefixDs2   string   = "ds2#"
 const PrefixMem   string   = "mem#"
@@ -24,6 +29,8 @@ const (
 type redisRepo struct{
 	cmder redis.Interface
 }
+
+var _ Interface = (*redisRepo)(nil)
 
 func NewRepo(cmder redis.Interface) *redisRepo {
 	return &redisRepo{cmder: cmder}
@@ -42,7 +49,7 @@ func (r *redisRepo) GetAllMetadata(ctx context.Context, histTb string) (*HistTbM
 	}
 	metadata.UserId = rawdata[0]
 	temp := []int{}
-	for _,elemt := range rawdata {
+	for _,elemt := range rawdata[1:] {
 		d, err := strconv.Atoi(elemt)
 		if err != nil {
 			return nil, err
@@ -72,19 +79,20 @@ func (r *redisRepo) GetState(ctx context.Context, histTb string) (int, error) {
 }
 
 // set `lastdeleted` metadata
-func (r *redisRepo) SetLastDel(ctx context.Context, histTb string, lastDel string) error {
+func (r *redisRepo) SetLastDel(ctx context.Context, histTb string, lastDel int) error {
 	histTbKey := fmt.Sprintf("%s%s", PrefixDs2, histTb)
-	return r.cmder.HSet(ctx, histTbKey, lastdeleted ,lastDel)
+	lastDelStr := strconv.Itoa(lastDel)
+	return r.cmder.HSet(ctx, histTbKey, lastdeleted ,lastDelStr)
 }
 
 // `state` metadata, 0:lock  , 1: open
-func (r *redisRepo) Lock(ctx context.Context, histTb string) error {
+func (r *redisRepo) lock(ctx context.Context, histTb string) error {
 	histTbKey := fmt.Sprintf("%s%s", PrefixDs2, histTb)
 	return r.cmder.HSet(ctx, histTbKey, state , "0")
 }
 
 // `state` metadata, 0:lock  , 1: open
-func (r *redisRepo) Unlock(ctx context.Context,histTb string) error{
+func (r *redisRepo) unlock(ctx context.Context,histTb string) error{
 	histTbKey := fmt.Sprintf("%s%s", PrefixDs2, histTb)
 	return r.cmder.HSet(ctx, histTbKey, state , "1")
 }
@@ -144,4 +152,42 @@ func (r *redisRepo) RemoveMemRows(ctx context.Context, histTb string, lastDel, l
 		}
 	}
 	return nil
+}
+
+// lock ds2, so that memory can be safely use ( since implicity memory also lock)
+func (r *redisRepo) LockMemory(ctx context.Context, histTb string) error {
+	lockCheckCount := 0
+	for lockCheckCount < maxNoLockChecks { // check 4s to lock the resources
+		fmt.Println("trying to lock ds2 ", lockCheckCount)
+		st, err := r.GetState(ctx, histTb)
+		if err != nil {
+			lockCheckCount++
+			continue
+		} 
+		if st == 1 { // check current unlock state
+			if lockErr := r.lock(ctx, histTb); lockErr == nil {
+				break
+			}
+		}
+		lockCheckCount++
+		time.Sleep(waitingTime)
+	}
+	if lockCheckCount == maxNoLockChecks {
+		return fmt.Errorf("unable to lock DS2 to remove memory rows in %s", histTb)
+	}
+	return nil
+}
+
+func (r *redisRepo) UnlockMemory(ctx context.Context, histTb string) error { 
+	tryUnlockCount := 0
+	for tryUnlockCount < maxNoLockChecks {
+		fmt.Println("try to unlock ", tryUnlockCount)
+		if unlockErr := r.unlock(ctx, histTb); unlockErr == nil {
+			fmt.Println("---operation succeeded..")
+			return nil
+		}
+		tryUnlockCount++
+		time.Sleep(waitingTime)
+	}
+	return fmt.Errorf("unable to unlock ds2 & memory of %s", histTb)
 }
