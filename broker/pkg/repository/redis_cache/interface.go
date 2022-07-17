@@ -6,6 +6,7 @@ import (
 
 type Interface interface {
 	GetState(ctx context.Context, histTb string) (int, error)
+	GetMemSize(ctx context.Context, histTb string) (int, error)
 	SetLastDel(ctx context.Context, histTb string, lastDel int) error
 	GetAllMetadata(ctx context.Context, histTb string) (*HistTbMetadata, error)
 	SetMemSize(ctx context.Context, histTb string, size int) error

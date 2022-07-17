@@ -17,56 +17,56 @@ import (
 	ms "github.com/NamalSanjaya/sonnet/pkgs/database/mssql"
 )
 
-const memCleanerInterval time.Duration = time.Second * 50
-const maxSpaceSize int = 2048    // 2kB
+const memCleanerInterval time.Duration = time.Minute * 8 // to handle 1/3 of total users for first phase(1024)
+const maxSpaceSize int = 2048                            // 2kB
 
-func main(){
+func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	redisCfg := &redis.Config{
-		Host: "localhost",
-		Port: 6379,
-		PassWord: "--",
-		DB: 0,
+		Host:     "localhost",
+		Port:     6379,
+		PassWord: "",
+		DB:       0,
 	}
 	dbCfg := &ms.Config{
 		Schema: "sqlserver", Hostname: "localhost", Database: "---",
-		Username: "--", Password: "---",Port: 1433,
+		Username: "--", Password: "---", Port: 1433,
 	}
 	stopSig := make(chan os.Signal, 1)
 	signal.Notify(stopSig, syscall.SIGINT, syscall.SIGTERM)
-	queue  := store.NewQueue()
-	ticker := time.NewTimer(memCleanerInterval)
+	queue := store.NewQueue()
+	ticker := time.NewTicker(memCleanerInterval)
 
-	redisClient  := redis.NewClient(redisCfg)
-	redisRepo    := redisrepo.NewRepo(redisClient)
+	redisClient := redis.NewClient(redisCfg)
+	redisRepo := redisrepo.NewRepo(redisClient)
 
 	histRepo := histbrepo.NewRepo(ctx, dbCfg)
-    logger   := lg.New("sonnet-broker")
+	logger := lg.New("sonnet-broker")
 	logger.EnableColor()
-	broker   := core.New(redisRepo, queue, histRepo, logger)
+	broker := core.New(redisRepo, queue, histRepo, logger)
 	jobCtrlChan := make(chan int)
 	shutDwnChan := make(chan int)
 	go broker.JobExec(ctx, jobCtrlChan, shutDwnChan)
 
-	go func () {
+	go func() {
 		logger.Info("starts redis-memory cleaner")
 		for {
 			select {
-			case <- ctx.Done():
+			case <-ctx.Done():
 				logger.Info("exit from redis-memory cleaner")
 				return
-			case <- ticker.C:
+			case <-ticker.C:
 				histTbList, err := broker.Cache.ListHistTbs(ctx)
 				if err != nil {
 					logger.Errorf("error listing history tables to find space exceeded history tables, due to %s", err.Error())
 				} else {
 					for _, histTb := range histTbList {
-						metadata, err2 := broker.Cache.GetAllMetadata(ctx, histTb) // define a new method to get only `memsize`
+						memSz, err2 := broker.Cache.GetMemSize(ctx, histTb)
 						if err2 != nil {
 							logger.Error(err2)
 							continue
 						}
-						if metadata.MemSize > maxSpaceSize {
+						if memSz > maxSpaceSize {
 							isLenZero := broker.Queue.Len() == 0
 							broker.Queue.Enqueue(histTb)
 							if broker.Queue.Len() == 1 && isLenZero {
@@ -78,10 +78,10 @@ func main(){
 			}
 		}
 	}()
-	<- stopSig
+	<-stopSig
 	cancel()
 	time.Sleep(time.Second * 2)
-	<- shutDwnChan
+	<-shutDwnChan
 	time.Sleep(time.Second * 2)
 	logger.Info("Broker gracefully shutting down")
 }

@@ -16,7 +16,7 @@ const waitingTime time.Duration = time.Millisecond * 1200
 
 const PrefixDs2   string   = "ds2#"
 const PrefixMem   string   = "mem#"
-const RegHistTbs string = "RegHistoryTbs"
+const RegHistTbs string = "reghistorytbs"
 
 const (
 	userid      string   = "userid"
@@ -82,6 +82,20 @@ func (r *redisRepo) GetState(ctx context.Context, histTb string) (int, error) {
 	return intSt, nil
 }
 
+// get memory block size
+func (r *redisRepo) GetMemSize(ctx context.Context, histTb string) (int, error) {
+	histTbKey := fmt.Sprintf("%s%s", PrefixDs2, histTb)
+	memSzStr, err := r.cmder.HGet(ctx, histTbKey, memsize)
+	if err != nil {
+		return 0, err  
+	}
+	memSzInt, err := strconv.Atoi(memSzStr)
+	if err != nil {
+		return 0, err
+	}
+	return memSzInt, nil
+}
+
 // set `lastdeleted` metadata
 func (r *redisRepo) SetLastDel(ctx context.Context, histTb string, lastDel int) error {
 	histTbKey := fmt.Sprintf("%s%s", PrefixDs2, histTb)
@@ -107,11 +121,12 @@ func (r *redisRepo) unlock(ctx context.Context,histTb string) error{
 	return r.cmder.HSet(ctx, histTbKey, state , "1")
 }
 
+// lastDel <= rows < lastRead
 func (r *redisRepo) ListMemoryRows(ctx context.Context, histTb string, lastDel, lastRead int) (MemoryRows, error) {
 	memoryRows := MemoryRows{}
 	histMemKey := fmt.Sprintf("%s%s",PrefixMem, histTb)
-	minScore := fmt.Sprintf("(%d", lastDel)
-	mxScore := fmt.Sprintf("%d", lastRead)
+	minScore := fmt.Sprintf("%d", lastDel)
+	mxScore := fmt.Sprintf("(%d", lastRead)
 	listTimestamp, err := r.cmder.ZRangeByScore(ctx, histMemKey, minScore, mxScore)
 	if err != nil {	
 		return memoryRows, err
@@ -156,12 +171,12 @@ func (r *redisRepo) GetMemRowSize(ctx context.Context, histTb, tmstamp string) (
 	return size, nil
 }
 
-// return total removed memory size
+// return total removed memory size and delete lastDel <= rows < lastRead
 func (r *redisRepo) RemoveMemRows(ctx context.Context, histTb string, lastDel, lastRead int) (int, error) {
 	histMemKey := fmt.Sprintf("%s%s",PrefixMem, histTb)
-	maxScore := strconv.Itoa(lastRead)
-	minScoreExv := fmt.Sprintf("(%d", lastDel)
-	listTimeStamp, err := r.cmder.ZRangeByScore(ctx, histMemKey, minScoreExv, maxScore)
+	maxScore := fmt.Sprintf("(%d", lastRead)
+	minScore := fmt.Sprintf("%d", lastDel)
+	listTimeStamp, err := r.cmder.ZRangeByScore(ctx, histMemKey, minScore, maxScore)
 	if err != nil {
 		return 0, err
 	}
@@ -177,7 +192,6 @@ func (r *redisRepo) RemoveMemRows(ctx context.Context, histTb string, lastDel, l
 			return 0, err
 		}
 	}
-	minScore := strconv.Itoa(lastDel)
 	err = r.cmder.ZRemRangeByScore(ctx, histMemKey, minScore, maxScore)
 	if err != nil {
 		return 0, err
