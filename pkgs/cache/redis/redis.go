@@ -35,6 +35,10 @@ func (rc *client) Del(ctx context.Context, keys ...string) error {
 	return rc.client.Del(ctx, keys...).Err()
 }
 
+func (rc *client) RPush(ctx context.Context, key string, values ...string) error {
+	return rc.client.RPush(ctx, key, values).Err()
+}
+
 func (rc *client) LRange(ctx context.Context, key string) ([]string, error){
 	return rc.client.LRange(ctx, key, 0, -1).Result()
 }
@@ -43,8 +47,8 @@ func (rc *client) LIndex(ctx context.Context, key string, indx int)(string, erro
 	return rc.client.LIndex(ctx, key, int64(indx)).Result()
 }
 
-func (rc *client) HSet(ctx context.Context, key, field, value string) error {
-	return rc.client.HSet(ctx, key, field, value).Err()
+func (rc *client) HSet(ctx context.Context, key string, values ...string) error {
+	return rc.client.HSet(ctx, key, values).Err()
 }
 
 func (rc *client) HGet(ctx context.Context,key, field string) (string, error) {
