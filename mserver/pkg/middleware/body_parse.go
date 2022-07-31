@@ -9,19 +9,32 @@ import (
 )
 
 func ReadDS1Json(r *http.Request) (*DS1MetadataJson, error){
-	var metadata *DS1MetadataJson
+	var metadata DS1MetadataJson
 	b, err := ioutil.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
-		return metadata, err
+		return &metadata, err
 	}
 	if err = json.Unmarshal(b, &metadata); err != nil {
-		return metadata, err
+		return &metadata, err
 	}
-	return metadata, nil
+	return &metadata, nil
 }
 
-func ValidateUUID(id string) bool {
+func IsInvalidateUUID(id string) bool {
 	_, err := uuid.Parse(id) 
-	return err == nil
+	return err != nil
+}
+
+func ReadHistTbJson(r *http.Request)(*PairHistTb, error) {
+	var pairHistTb PairHistTb
+	b, err := ioutil.ReadAll(r.Body)
+	defer r.Body.Close()
+	if err != nil {
+		return &pairHistTb, err
+	}
+	if err = json.Unmarshal(b, &pairHistTb); err != nil {
+		return &pairHistTb, err
+	}
+	return &pairHistTb, nil
 }

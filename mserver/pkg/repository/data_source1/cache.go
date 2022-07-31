@@ -1,10 +1,11 @@
-package redis_cache
+package data_source1
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/NamalSanjaya/sonnet/pkgs/cache/redis"
+	mdw "github.com/NamalSanjaya/sonnet/mserver/pkg/middleware"
 )
 
 const ds1 string = "ds1#"
@@ -58,10 +59,22 @@ func (r *redisRepo) SetDs1Metadata(ctx context.Context, userId string, metadata 
 
 func (r *redisRepo) AddBlockUser(ctx context.Context, userId, blockedUserId string) error {
 	blockListKey := makeDs1BlockUserListKey(userId)
-	if err := r.cmder.SAdd(ctx, blockListKey, blockedUserId); err != nil {
+	return r.cmder.SAdd(ctx, blockListKey, blockedUserId)
+}
+
+func (r *redisRepo) CreateNewContact(ctx context.Context, userId, newUserId string, pairHistTb *mdw.PairHistTb) error {
+	var err error
+	allHistTbsKey := makeDs1AllHistTbsKey(userId)
+	if err = r.cmder.SAdd(ctx, allHistTbsKey, newUserId); err != nil {
 		return err
 	}
-	return nil
+	histTbKey := makeDs1HistTbKey(userId, newUserId)
+	return r.cmder.HSet(ctx, histTbKey, tx2rx_HistTb, pairHistTb.Tx2Rx_HistTb, rx2tx_HistTb, pairHistTb.Rx2Tx_HistTb)
+}
+
+func (r *redisRepo) RemoveBlockUser(ctx context.Context, userId, rmUserId string) error {
+	blockListKey := makeDs1BlockUserListKey(userId)
+	return r.cmder.SRem(ctx, blockListKey, rmUserId)
 }
 
 func makeDs1InfoKey(usrId string) string {

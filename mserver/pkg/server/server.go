@@ -5,23 +5,23 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 
-	hnd "github.com/NamalSanjaya/sonnet/mserver/pkg/handlers"
+	ds1hnd "github.com/NamalSanjaya/sonnet/mserver/pkg/handlers/data_source1"
 	mdw "github.com/NamalSanjaya/sonnet/mserver/pkg/middleware"
 )
 
 type Server struct {
-	h hnd.Interface
+	ds1h ds1hnd.Interface
 }
 
-func New(handlers hnd.Interface) *Server{
+func New(ds1Handler ds1hnd.Interface) *Server{
 	return &Server{
-		h: handlers,
+		ds1h: ds1Handler,
 	}
 }
 
 // insert all metadata for user to ds1
 func (s *Server) InsertMetadataDS1(w http.ResponseWriter, r *http.Request, p httprouter.Params){
-	hres := s.h.InsertMetadataDS1(w,r,p)
+	hres := s.ds1h.InsertMetadata(w,r,p)
 	// TODO: add a error log, hres.Err contain the error/nil
 	mdw.SetResponseHeaders(w, hres.StatusCode, map[string]string{
 		ContentType: ApplicationJson_Utf8,
@@ -32,7 +32,27 @@ func (s *Server) InsertMetadataDS1(w http.ResponseWriter, r *http.Request, p htt
 
 // add a new block user to ds1
 func (s *Server) AddBlockUserToDS1(w http.ResponseWriter, r *http.Request, p httprouter.Params){
-	hres:= s.h.AddBlockUserToDS1(w, r, p)
+	hres := s.ds1h.AddBlockUser(w, r, p)
+	mdw.SetResponseHeaders(w, hres.StatusCode, map[string]string{
+		ContentType: ApplicationJson_Utf8,
+		Date: "" ,
+	})
+	mdw.SendResponse(w, &mdw.ResponseMsg{ Err: hres.ErrCode })
+}
+
+// add new contact to ds1
+func (s *Server) AddNewContactToDS1(w http.ResponseWriter, r *http.Request, p httprouter.Params){
+	hres := s.ds1h.AddNewContact(w, r, p)
+	mdw.SetResponseHeaders(w, hres.StatusCode, map[string]string{
+		ContentType: ApplicationJson_Utf8,
+		Date: "" ,
+	})
+	mdw.SendResponse(w, &mdw.ResponseMsg{ Err: hres.ErrCode })
+}
+
+// remove block user from ds1
+func (s *Server) RemoveBlockUserFromDS1(w http.ResponseWriter, r *http.Request, p httprouter.Params){
+	hres := s.ds1h.RemoveBlockUser(w, r, p)
 	mdw.SetResponseHeaders(w, hres.StatusCode, map[string]string{
 		ContentType: ApplicationJson_Utf8,
 		Date: "" ,
