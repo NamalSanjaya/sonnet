@@ -1,6 +1,6 @@
 ### Mserver API input data formats examples
-1. | /ms/set-ds1/{userId} | PUT |
-   | -------------------- | --- |  
+1. | /ms/set-ds1/:userId | PUT |
+   | ------------------- | --- |  
 
 ```json
  {
@@ -14,6 +14,18 @@
 	    }
 }
 ```
-2. | /ms/set-blockuser/{userId}?userid=someid | PUT |
-   | ---------------------------------------- | --- |
+2. | /ms/set-blockuser/:userId?userid=someid | PUT |
+   | --------------------------------------- | --- |
  
+3. | /ms/set-newcontact-ds1/:userId?userid=newUserId | PUT |
+   | ----------------------------------------------- | --- |
+   
+```json
+{ 
+     "tx2rx": "tx-link-rx", 
+     "rx2tx":"rx-link-tx"
+}
+```
+4. | /ms/del-blockuser/:userId?userid=rmSomeid | PUT |
+   | ----------------------------------------- | --- |
+   
