@@ -70,6 +70,14 @@ func (h *Handler) AddNewContact(w http.ResponseWriter, r *http.Request, p httpro
 		return hnd.MakeHandlerResponse(fmt.Errorf("userid and new contact userid can't be same with user id %s", userId),
 		hnd.FailedCreateNewUsrDS1, http.StatusBadRequest)
 	}
+	if mdw.IsInvalidateUUID(userId) {
+		return hnd.MakeHandlerResponse(fmt.Errorf("invalid user id %s, hence can't create a new contact with %s in ds1", 
+		userId, newUserId), hnd.FailedCreateNewUsrDS1, http.StatusBadRequest) 
+	}
+	if mdw.IsInvalidateUUID(newUserId) {
+		return hnd.MakeHandlerResponse(fmt.Errorf("invalid new user id %s given to create a new contact with %s in ds1", 
+		newUserId, userId), hnd.FailedCreateNewUsrDS1, http.StatusBadRequest)
+	}
 	data, err := mdw.ReadHistTbJson(r)
 	if err != nil {
 		return hnd.MakeHandlerResponse(fmt.Errorf("unable to read reqeust body for userid %s due to %w", userId, err),

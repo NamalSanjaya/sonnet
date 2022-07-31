@@ -20,4 +20,6 @@ const (
 	FailedAddBlockUsrDS1 int = 3
 	FailedCreateNewUsrDS1 int = 4
 	FailedRmBlockUserDs1 int = 5
+	FailedCreateNewUsrDS2 int = 6
+	SomeErrCreateNewUsrDS2 int = 7 // unsuccessful history table creation, some errors occuried
 )
