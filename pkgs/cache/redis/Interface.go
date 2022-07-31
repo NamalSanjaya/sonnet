@@ -18,4 +18,6 @@ type Interface interface{
 	ZRangeByScore(ctx context.Context, key string, minScore, maxScore string) ([]string, error)
 	SMembers(ctx context.Context, key string)([]string, error)
 	SRem(ctx context.Context, key string, values ...string) error
+	SAdd(ctx context.Context, key string, value ...string) error
+	SSet(ctx context.Context, key string, value ...string) error
 }

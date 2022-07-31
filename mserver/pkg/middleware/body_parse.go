@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"github.com/google/uuid"
 )
 
 func ReadDS1Json(r *http.Request) (*DS1MetadataJson, error){
@@ -18,4 +19,9 @@ func ReadDS1Json(r *http.Request) (*DS1MetadataJson, error){
 		return metadata, err
 	}
 	return metadata, nil
+}
+
+func ValidateUUID(id string) bool {
+	_, err := uuid.Parse(id) 
+	return err == nil
 }

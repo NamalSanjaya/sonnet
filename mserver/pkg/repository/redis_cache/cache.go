@@ -10,11 +10,11 @@ import (
 const ds1 string = "ds1#"
 
 const username string = "username"
-const email string  = "email"
+const email string = "email"
 const tx2rx_HistTb string = "tx2rx"
 const rx2tx_HistTb string = "rx2tx"
 
-type redisRepo struct{
+type redisRepo struct {
 	cmder redis.Interface
 }
 
@@ -24,15 +24,15 @@ func NewRepo(cmder redis.Interface) *redisRepo {
 	return &redisRepo{cmder: cmder}
 }
 
-//  0:lock  , 1: open 
-func (r *redisRepo) SetDs1Metadata(ctx context.Context,userId string, metadata *DS1Metadata) error {
+//  0:lock  , 1: open
+func (r *redisRepo) SetDs1Metadata(ctx context.Context, userId string, metadata *DS1Metadata) error {
 	var err, setErr error
 	infoKey := makeDs1InfoKey(userId)
 	if err = r.cmder.HSet(ctx, infoKey, username, metadata.Info.Username, email, metadata.Info.Email); err != nil {
 		return err
 	}
 	blockListKey := makeDs1BlockUserListKey(userId)
-	if err = r.cmder.RPush(ctx, blockListKey, metadata.Info.BlockUserList...); err != nil {
+	if err = r.cmder.SSet(ctx, blockListKey, metadata.Info.BlockUserList...); err != nil {
 		return err
 	}
 	var errList []error
@@ -44,14 +44,24 @@ func (r *redisRepo) SetDs1Metadata(ctx context.Context,userId string, metadata *
 		}
 		toUserIdList = append(toUserIdList, toUserId)
 	}
+	// TODO: remove previous list, if exist
 	allHistTbsKey := makeDs1AllHistTbsKey(userId)
-	if err = r.cmder.RPush(ctx, allHistTbsKey, toUserIdList...); err != nil {
+	if err = r.cmder.SSet(ctx, allHistTbsKey, toUserIdList...); err != nil {
 		errList = append(errList, err)
 	}
 	if len(errList) > 0 {
 		setErr = fmt.Errorf("errors occuried during ds1 caching process of %s and list of errors %v", userId, errList)
 	}
+	// TODO: this should return nil and error should log at here
 	return setErr
+}
+
+func (r *redisRepo) AddBlockUser(ctx context.Context, userId, blockedUserId string) error {
+	blockListKey := makeDs1BlockUserListKey(userId)
+	if err := r.cmder.SAdd(ctx, blockListKey, blockedUserId); err != nil {
+		return err
+	}
+	return nil
 }
 
 func makeDs1InfoKey(usrId string) string {

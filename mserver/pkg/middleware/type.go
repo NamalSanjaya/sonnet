@@ -11,3 +11,7 @@ type DS1MetadataJson struct {
 	BlockUserList []string              `json:"blockuserlist"`
 	HistTbs       map[string]PairHistTb `json:"histtbs"`
 }
+
+type ResponseMsg struct {
+	Err int
+}

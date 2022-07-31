@@ -1,12 +1,12 @@
 package server
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
 
 	hnd "github.com/NamalSanjaya/sonnet/mserver/pkg/handlers"
+	mdw "github.com/NamalSanjaya/sonnet/mserver/pkg/middleware"
 )
 
 type Server struct {
@@ -19,10 +19,23 @@ func New(handlers hnd.Interface) *Server{
 	}
 }
 
+// insert all metadata for user to ds1
 func (s *Server) InsertMetadataDS1(w http.ResponseWriter, r *http.Request, p httprouter.Params){
-	if err := s.h.InsertMetadataDS1(w,r,p); err != nil{
-		fmt.Fprint(w, "failed namal")
-		return
-	}
-	fmt.Fprint(w, "okay namal")
+	hres := s.h.InsertMetadataDS1(w,r,p)
+	// TODO: add a error log, hres.Err contain the error/nil
+	mdw.SetResponseHeaders(w, hres.StatusCode, map[string]string{
+		ContentType: ApplicationJson_Utf8,
+		Date: "" ,
+	})
+	mdw.SendResponse(w, &mdw.ResponseMsg{Err: hres.ErrCode})
+}
+
+// add a new block user to ds1
+func (s *Server) AddBlockUserToDS1(w http.ResponseWriter, r *http.Request, p httprouter.Params){
+	hres:= s.h.AddBlockUserToDS1(w, r, p)
+	mdw.SetResponseHeaders(w, hres.StatusCode, map[string]string{
+		ContentType: ApplicationJson_Utf8,
+		Date: "" ,
+	})
+	mdw.SendResponse(w, &mdw.ResponseMsg{ Err: hres.ErrCode })
 }

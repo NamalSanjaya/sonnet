@@ -83,3 +83,15 @@ func (rc *client) SMembers(ctx context.Context, key string)([]string, error) {
 func (rc *client) SRem(ctx context.Context, key string, values ...string) error {
 	return rc.client.SRem(ctx, key, values).Err()
 }
+
+func (rc *client) SAdd(ctx context.Context, key string, value ...string) error {
+	return rc.client.SAdd(ctx, key, value).Err()
+}
+
+// addding set of blockusers with uniqueness
+func (rc *client) SSet(ctx context.Context, key string, value ...string) error {
+	if err := rc.client.Del(ctx, key).Err(); err != nil {
+		return err
+	}
+	return rc.client.SAdd(ctx, key, value).Err()
+}

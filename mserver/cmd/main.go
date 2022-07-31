@@ -29,6 +29,7 @@ func main()  {
 	
 	// PUT request
 	router.PUT("/ms/set-ds1/:userId", srv.InsertMetadataDS1)
+	router.PUT("/ms/set-blockuser/:userId", srv.AddBlockUserToDS1)
 	
 	fmt.Println("Listen....8000")
 	log.Fatal(http.ListenAndServe(":8000", router))
