@@ -99,7 +99,7 @@ func (h *Handler) RemoveBlockUser(w http.ResponseWriter, r *http.Request, p http
 		hnd.FailedRmBlockUserDs1, http.StatusBadRequest)
 	}
 	if err := h.dataSrc1.RemoveBlockUser(ctx, userId, rmBlockUser); err != nil {
-		return hnd.MakeHandlerResponse(fmt.Errorf("failed to remove block-user %s of user %s from ds1", rmBlockUser, userId),
+		return hnd.MakeHandlerResponse(fmt.Errorf("failed to remove block-userid %s from userid %s in ds1", rmBlockUser, userId),
 		hnd.FailedRmBlockUserDs1, http.StatusInternalServerError)
 	}
 	return hnd.MakeHandlerResponse(nil, hnd.NoError, http.StatusOK)
