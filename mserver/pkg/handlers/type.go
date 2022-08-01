@@ -22,4 +22,5 @@ const (
 	FailedRmBlockUserDs1 int = 5
 	FailedCreateNewUsrDS2 int = 6
 	SomeErrCreateNewUsrDS2 int = 7 // unsuccessful history table creation, some errors occuried
+	FailedMvLastReadDS2 int = 8
 )

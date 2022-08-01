@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 
 	"github.com/google/uuid"
 )
@@ -37,4 +38,8 @@ func ReadHistTbJson(r *http.Request)(*PairHistTb, error) {
 		return &pairHistTb, err
 	}
 	return &pairHistTb, nil
+}
+
+func ToInt(numStr string)(int, error){
+	return strconv.Atoi(numStr)
 }

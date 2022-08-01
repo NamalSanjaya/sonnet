@@ -13,6 +13,7 @@ import (
 	ds2hnd "github.com/NamalSanjaya/sonnet/mserver/pkg/handlers/data_source2"
 	dsrc1 "github.com/NamalSanjaya/sonnet/mserver/pkg/repository/data_source1"
 	dsrc2 "github.com/NamalSanjaya/sonnet/mserver/pkg/repository/data_source2"
+	bkdsrc2 "github.com/NamalSanjaya/sonnet/broker/pkg/repository/redis_cache"
 )
 
 func main()  {
@@ -25,10 +26,11 @@ func main()  {
 	redisClient := redis.NewClient(redisCfg)
 	ds1Repo := dsrc1.NewRepo(redisClient)
 	ds2Repo := dsrc2.NewRepo(redisClient)
+	bkDs2Repo := bkdsrc2.NewRepo(redisClient)
 
 	router := httprouter.New()
 	ds1handler := ds1hnd.New(ds1Repo)
-	ds2handler := ds2hnd.New(ds2Repo)
+	ds2handler := ds2hnd.New(ds2Repo, bkDs2Repo)
 	srv    := msrv.New(ds1handler, ds2handler)
 	
 	// PUT request - ds1
@@ -41,6 +43,7 @@ func main()  {
 
 	// PUT request -ds2
 	router.PUT("/ms/set-newcontact-ds2/:userId", srv.AddNewContactToDS2)
+	router.PUT("/ms/set-lastread/:userId", srv.MoveLastReadInDS2)
 	
 	fmt.Println("Listen....8000")
 	log.Fatal(http.ListenAndServe(":8000", router))
