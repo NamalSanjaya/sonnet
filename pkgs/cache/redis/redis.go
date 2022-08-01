@@ -93,5 +93,8 @@ func (rc *client) SSet(ctx context.Context, key string, value ...string) error {
 	if err := rc.client.Del(ctx, key).Err(); err != nil {
 		return err
 	}
+	if len(value) == 0 {
+		return nil
+	}
 	return rc.client.SAdd(ctx, key, value).Err()
 }

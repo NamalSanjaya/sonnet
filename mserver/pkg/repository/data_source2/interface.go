@@ -10,4 +10,5 @@ type Interface interface{
 	GetToUser(ctx context.Context, histTb string) (string, error)
 	GetLastMsg(ctx context.Context, histTb string) (int, error)
 	SetLastRead(ctx context.Context, histTb string, lastRead int) error
+	GetAllMetadata(ctx context.Context, histTb string) (*HistTbMetadata, error)
 }

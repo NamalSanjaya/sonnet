@@ -9,18 +9,15 @@ import (
 	hnd "github.com/NamalSanjaya/sonnet/mserver/pkg/handlers"
 	mdw "github.com/NamalSanjaya/sonnet/mserver/pkg/middleware"
 	dsrc2 "github.com/NamalSanjaya/sonnet/mserver/pkg/repository/data_source2"
-	bkdsrc2 "github.com/NamalSanjaya/sonnet/broker/pkg/repository/redis_cache"
 )
 
 type Handler struct {
 	dataSrc2 dsrc2.Interface
-	brkerDataSrc2 bkdsrc2.Interface
 }
 
-func New(ds2Db dsrc2.Interface, brokerDs2Db bkdsrc2.Interface) *Handler{
+func New(ds2Db dsrc2.Interface) *Handler{
 	return &Handler{
 		dataSrc2: ds2Db,
-		brkerDataSrc2: brokerDs2Db,
 	}
 }
 
@@ -82,7 +79,7 @@ func (h *Handler) MoveLastRead(w http.ResponseWriter, r *http.Request, p httprou
 		return hnd.MakeHandlerResponse(fmt.Errorf("failed to move last read of %s in ds2 due to invalid move number %s due to %w",
 		friendHistTb, r.URL.Query().Get("nxtread"), err), hnd.FailedMvLastReadDS2, http.StatusBadRequest)
 	}
-	metadata, err := h.brkerDataSrc2.GetAllMetadata(ctx, friendHistTb)
+	metadata, err := h.dataSrc2.GetAllMetadata(ctx, friendHistTb)
 	if err != nil {
 		return hnd.MakeHandlerResponse(fmt.Errorf("failed to verify the access of userid %s to %s table due to %w",
 		userId, friendHistTb, err), hnd.FailedMvLastReadDS2, http.StatusInternalServerError)
@@ -105,3 +102,4 @@ func (h *Handler) MoveLastRead(w http.ResponseWriter, r *http.Request, p httprou
 	}
 	return hnd.MakeHandlerResponse(nil, hnd.NoError, http.StatusCreated)
 }
+ 

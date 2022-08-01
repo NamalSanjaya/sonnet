@@ -69,6 +69,37 @@ func (rdb *redisDbRepo) SetLastRead(ctx context.Context, histTb string, lastRead
 	return rdb.cmder.HSet(ctx, makeHistoryTbKey(histTb), lastread ,lastReadStr)
 }
 
+// get metadata in DS2
+func (r *redisDbRepo) GetAllMetadata(ctx context.Context, histTb string) (*HistTbMetadata, error){
+	metadata := &HistTbMetadata{}
+	histTbKey := fmt.Sprintf("%s%s", PrefixDs2, histTb)
+	rawdata, err := r.cmder.HVals(ctx, histTbKey)
+	if err != nil {
+		return nil, err
+	}
+	if len(rawdata) == 0 {
+		return nil, fmt.Errorf("unable to find history table with name %s", histTb)
+	}
+	if len(rawdata) != 6 {
+		return nil, fmt.Errorf("partially cached metadata was found in DS2 for %s", histTb)
+	}
+	metadata.UserId = rawdata[0]
+	temp := []int{}
+	for _,elemt := range rawdata[1:] {
+		d, err := strconv.Atoi(elemt)
+		if err != nil {
+			return nil, err
+		}
+		temp = append(temp, d)
+	}
+	metadata.Lastmsg     = temp[0]
+	metadata.LastRead    = temp[1]
+	metadata.LastDeleted = temp[2]
+	metadata.MemSize     = temp[3]
+	metadata.State 		 = temp[4]
+	return metadata, nil
+}
+
 func makeAllHistoryTbKey() string {
 	return fmt.Sprintf("%s%s", PrefixDs2, RegHistTbs)
 }
