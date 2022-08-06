@@ -2,9 +2,14 @@ package redis
 
 import (
 	"context"
+	"time"
+
+	rds "github.com/go-redis/redis/v8"
 )
 
 type Interface interface{
+	Set(ctx context.Context, key, value string, expireTime time.Duration) error
+	Get(ctx context.Context, key string) (string, error)
 	Del(ctx context.Context, keys ...string) error
 	RPush(ctx context.Context, key string, values ...string) error
 	LRange(ctx context.Context, key string) ([]string, error)
@@ -20,4 +25,6 @@ type Interface interface{
 	SRem(ctx context.Context, key string, values ...string) error
 	SAdd(ctx context.Context, key string, value ...string) error
 	SSet(ctx context.Context, key string, value ...string) error
+	Watch(ctx context.Context, txFn func(*rds.Tx) error , keys ...string) error
+	MakeTxPipeliner() rds.Pipeliner
 }

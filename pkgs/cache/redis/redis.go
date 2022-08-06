@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"fmt"
+	"time"
 
 	rds "github.com/go-redis/redis/v8"
 )
@@ -29,6 +30,14 @@ func NewClient(config *Config) *client {
 	return &client{
 		client: rds.NewClient(opt),
 	}
+}
+
+func (rc *client) Set(ctx context.Context, key, value string, expireTime time.Duration) error {
+	return rc.client.Set(ctx, key, value, expireTime).Err()
+}
+
+func (rc *client) Get(ctx context.Context, key string) (string, error) {
+	return rc.client.Get(ctx, key).Result()
 }
 
 func (rc *client) Del(ctx context.Context, keys ...string) error {
@@ -97,4 +106,12 @@ func (rc *client) SSet(ctx context.Context, key string, value ...string) error {
 		return nil
 	}
 	return rc.client.SAdd(ctx, key, value).Err()
+}
+
+func (rc *client) Watch(ctx context.Context, txFn func(*rds.Tx) error , keys ...string) error {
+	return rc.client.Watch(ctx, txFn, keys...)
+}
+
+func (rc *client) MakeTxPipeliner() rds.Pipeliner {
+	return rc.client.TxPipeline()
 }

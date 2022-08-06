@@ -5,12 +5,19 @@ import (
 	"fmt"
 	"strconv"
 
+	rds "github.com/go-redis/redis/v8"
+
 	mdw "github.com/NamalSanjaya/sonnet/mserver/pkg/middleware"
 	"github.com/NamalSanjaya/sonnet/pkgs/cache/redis"
+	rdtx "github.com/NamalSanjaya/sonnet/pkgs/tx/redis"
+	trds2 "github.com/NamalSanjaya/sonnet/mserver/pkg/clients/transct_ds2"
 )
 
-const PrefixDs2   string   = "ds2#"
-const RegHistTbs string = "reghistorytbs"
+const 
+(
+	PrefixDs2   string   = "ds2#"
+    RegHistTbs string = "reghistorytbs"
+)
 
 const (
 	userid      string   = "userid"  // to userid
@@ -34,7 +41,7 @@ func NewRepo(cmder redis.Interface) *redisDbRepo {
 // create history tables for both direction(owner <--> friend)
 func (rdb *redisDbRepo) CreateHistTbs(ctx context.Context, userId, newUserId string, pairHistTb *mdw.PairHistTb) error {
 	var err error
-	if err = rdb.cmder.SAdd(ctx, makeAllHistoryTbKey(), pairHistTb.Tx2Rx_HistTb, pairHistTb.Rx2Tx_HistTb); err != nil {
+	if err = rdb.cmder.SAdd(ctx, rdb.MakeAllHistoryTbKey(), pairHistTb.Tx2Rx_HistTb, pairHistTb.Rx2Tx_HistTb); err != nil {
 		return err
 	}
 	if err = rdb.createHistTb(ctx, newUserId, pairHistTb.Tx2Rx_HistTb); err != nil {
@@ -44,7 +51,7 @@ func (rdb *redisDbRepo) CreateHistTbs(ctx context.Context, userId, newUserId str
 }
 
 func (rdb *redisDbRepo) createHistTb(ctx context.Context, userId, histTb string) error {
-	if err := rdb.cmder.HSet(ctx, makeHistoryTbKey(histTb), userid, userId, lastmsg, "0", lastread, "0", 
+	if err := rdb.cmder.HSet(ctx, rdb.MakeHistoryTbKey(histTb), userid, userId, lastmsg, "0", lastread, "0", 
 	lastdeleted, "0", memsize, "0", state, "1"); err != nil {
 		return err
 	}
@@ -53,57 +60,46 @@ func (rdb *redisDbRepo) createHistTb(ctx context.Context, userId, histTb string)
 
 // TODO: notFoundErr in GET methods should return ("", nil)
 func (rdb *redisDbRepo) GetToUser(ctx context.Context, histTb string) (string, error) {
-	return rdb.cmder.HGet(ctx, makeHistoryTbKey(histTb), userid)
+	id, err := rdb.cmder.HGet(ctx, rdb.MakeHistoryTbKey(histTb), userid)
+	if err == nil {
+		return id, nil
+	}
+	if err == rds.Nil{
+		return "", nil
+	}
+	return "", err
 }
 
 func (rdb *redisDbRepo) GetLastMsg(ctx context.Context, histTb string) (int, error) {
-	lstMsg, err := rdb.cmder.HGet(ctx, makeHistoryTbKey(histTb), lastmsg)
-	if err != nil {
+	lstMsg, err := rdb.cmder.HGet(ctx, rdb.MakeHistoryTbKey(histTb), lastmsg)
+	if err == nil {
+		return strconv.Atoi(lstMsg)
+	}
+	if err == rds.Nil {
 		return 0, nil
 	}
-	return strconv.Atoi(lstMsg)
+	return 0, err
 }
 
-func (rdb *redisDbRepo) SetLastRead(ctx context.Context, histTb string, lastRead int) error {
-	lastReadStr := strconv.Itoa(lastRead)
-	return rdb.cmder.HSet(ctx, makeHistoryTbKey(histTb), lastread ,lastReadStr)
-}
-
-// get metadata in DS2
-func (r *redisDbRepo) GetAllMetadata(ctx context.Context, histTb string) (*HistTbMetadata, error){
-	metadata := &HistTbMetadata{}
-	histTbKey := fmt.Sprintf("%s%s", PrefixDs2, histTb)
-	rawdata, err := r.cmder.HVals(ctx, histTbKey)
-	if err != nil {
-		return nil, err
-	}
-	if len(rawdata) == 0 {
-		return nil, fmt.Errorf("unable to find history table with name %s", histTb)
-	}
-	if len(rawdata) != 6 {
-		return nil, fmt.Errorf("partially cached metadata was found in DS2 for %s", histTb)
-	}
-	metadata.UserId = rawdata[0]
-	temp := []int{}
-	for _,elemt := range rawdata[1:] {
-		d, err := strconv.Atoi(elemt)
+func (rdb *redisDbRepo) Watch(ctx context.Context, txFn func(trds2.Interface) error, comtFn func(trds2.Interface) error, key string) error {
+	return rdb.cmder.Watch(ctx, func(tx *rds.Tx) error {
+		newTransct := trds2.BeginTransct(rdtx.CreateTx(tx))
+		err := txFn(newTransct)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		temp = append(temp, d)
-	}
-	metadata.Lastmsg     = temp[0]
-	metadata.LastRead    = temp[1]
-	metadata.LastDeleted = temp[2]
-	metadata.MemSize     = temp[3]
-	metadata.State 		 = temp[4]
-	return metadata, nil
+		_, err = tx.TxPipelined(ctx, func(p rds.Pipeliner) error {
+			newTransct.AddPipeliner(p)
+			return comtFn(newTransct)
+		})
+		return err
+	}, key)
 }
 
-func makeAllHistoryTbKey() string {
+func (rdb *redisDbRepo) MakeAllHistoryTbKey() string {
 	return fmt.Sprintf("%s%s", PrefixDs2, RegHistTbs)
 }
 
-func makeHistoryTbKey(histTb string) string {
+func (rdb *redisDbRepo) MakeHistoryTbKey(histTb string) string {
 	return fmt.Sprintf("%s%s", PrefixDs2, histTb)
 }
