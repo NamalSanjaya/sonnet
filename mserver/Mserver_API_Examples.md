@@ -29,3 +29,15 @@
 4. | /ms/del-blockuser/:userId?userid=rmSomeid | PUT |
    | ----------------------------------------- | --- |
    
+5. | /ms/set-newcontact-ds2/:userId?userid=someToUserId | PUT |
+   | -------------------------------------------------- | --- |
+   ```json
+   { 
+	 "tx2rx": "5173cb67-652b-46d6-8b4b-342a0eba1cdc", 
+	 "rx2tx":"44aed4af-b121-468b-8ac8-499b36a63aa2"
+   }
+   ```
+ 6. | /ms/set-lastread/:userId?tohist=someToUserId&nxtread=107 | PUT |
+    | -------------------------------------------------------- | --- |
+    
+    
