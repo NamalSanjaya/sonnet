@@ -23,4 +23,5 @@ const (
 	FailedCreateNewUsrDS2 int = 6
 	SomeErrCreateNewUsrDS2 int = 7 // unsuccessful history table creation, some errors occuried
 	FailedMvLastReadDS2 int = 8
+	FailedUpdateLastMsgDs2 int = 9
 )

@@ -46,6 +46,8 @@ func main()  {
 	// PUT request -ds2
 	router.PUT("/ms/set-newcontact-ds2/:userId", srv.AddNewContactToDS2)
 	router.PUT("/ms/set-lastread/:userId", srv.MoveLastReadInDS2)
+	router.PUT("/ms/set-lastmsg/:userId", srv.UpdateLastMsgInDS2)
+
 	
 	fmt.Println("Listen....8000")
 	log.Fatal(http.ListenAndServe(":8000", router))

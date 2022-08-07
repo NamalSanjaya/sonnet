@@ -14,7 +14,7 @@ import (
 	rds "github.com/go-redis/redis/v8"
 )
 
-const mxRetry int = 10
+const mxRetry int = 3
 
 type Handler struct {
 	dataSrc2 dsrc2.Interface
@@ -93,18 +93,22 @@ func (h *Handler) MoveLastRead(w http.ResponseWriter, r *http.Request, p httprou
 			metadata, err := tr.GetAllMetadata(ctx, friendHistTb)
 			if err != nil {
 				errCode = hnd.FailedMvLastReadDS2
-				statusCode = http.StatusBadRequest
-				return fmt.Errorf("failed to verify the access of userid %s to %s table due to %w",userId, friendHistTb, err)
+				statusCode = http.StatusInternalServerError
+				return fmt.Errorf("failed to verify the access of userid %s to %s table to move lastread due to %w",userId, friendHistTb, err)
+			}
+			if metadata == nil {
+				statusCode = http.StatusNotFound
+				return fmt.Errorf("no history table found under %s", friendHistTb)
 			}
 			if userId != metadata.UserId {
 				errCode = hnd.FailedMvLastReadDS2
 				statusCode = http.StatusUnauthorized
-				return fmt.Errorf("denied accessing history tb %s, not a friend of user id %s",friendHistTb, userId)
+				return fmt.Errorf("denied accessing history tb %s to move lastread, not a friend of user id %s",friendHistTb, userId)
 			}
 			if nxtLastRead < metadata.LastDeleted || nxtLastRead < metadata.LastRead ||  nxtLastRead > metadata.Lastmsg {
 				errCode = hnd.FailedMvLastReadDS2
 				statusCode = http.StatusBadRequest
-				return fmt.Errorf("last read msg index is out of range of hist tb %s", friendHistTb)
+				return fmt.Errorf("falied to update lastmsg due to last read msg index is out of range of hist tb %s", friendHistTb)
 			}
 			return nil
 		}, func(tr trds2.Interface) error {
@@ -121,16 +125,84 @@ func (h *Handler) MoveLastRead(w http.ResponseWriter, r *http.Request, p httprou
 			break
 		} else if err != rds.TxFailedErr {
 			errCode = hnd.FailedMvLastReadDS2
-			statusCode = http.StatusInternalServerError
 			break
 		}
 		if i == mxRetry - 1 {
 			errCode = hnd.FailedMvLastReadDS2
 			statusCode = http.StatusInternalServerError
-			err = fmt.Errorf("unable to lock the history tb %s to move lastread metadata of user id %s", 
+			err = fmt.Errorf("max limit of retrying is exceeded. hence unable to lock the history tb %s to move lastread metadata of user id %s", 
 			friendHistTb, userId)
 		}
 	}
 	return hnd.MakeHandlerResponse(err, errCode, statusCode)
 }
- 
+
+func(h *Handler) UpdateLastMsg(w http.ResponseWriter, r *http.Request, p httprouter.Params) *hnd.HandlerResponse {
+	ctx := context.Background()
+	userId := p.ByName("userId")
+	friendHistTb := r.URL.Query().Get("tohist")
+
+	// userid(`userid`), friend's history tb id(`tohist`) should be in uuid4 format
+	if mdw.IsInvalidateUUID(userId) {
+		return hnd.MakeHandlerResponse(fmt.Errorf("falied to update lastmsg of %s in ds2 due to invalied userid %s",
+		friendHistTb, userId), hnd.FailedUpdateLastMsgDs2, http.StatusBadRequest) 
+	}
+	if mdw.IsInvalidateUUID(friendHistTb) {
+		return hnd.MakeHandlerResponse(fmt.Errorf("falied to update lastmsg in ds2 due to invalied history id %s", friendHistTb),
+		hnd.FailedUpdateLastMsgDs2, http.StatusBadRequest) 
+	}
+
+	// check Friend's HistTb[touserid] == userid
+	latestMsg, err := mdw.ToInt(r.URL.Query().Get("latestmsg"))
+	if err != nil {
+		return hnd.MakeHandlerResponse(fmt.Errorf("failed to update lastmsg of %s in ds2 due to invalid lastmsg number %s due to %w",
+		friendHistTb, r.URL.Query().Get("latestmsg"), err), hnd.FailedUpdateLastMsgDs2, http.StatusBadRequest)
+	}
+
+	// begin tx with watch
+	errCode := hnd.FailedUpdateLastMsgDs2
+	statusCode := http.StatusCreated
+	key := h.dataSrc2.MakeHistoryTbKey(friendHistTb)
+	for i:=0; i< mxRetry; i++ {
+		err = h.dataSrc2.Watch(ctx, func(tr trds2.Interface) error {
+			metadata, err := tr.GetAllMetadata(ctx, friendHistTb)
+			if err != nil {
+				statusCode = http.StatusInternalServerError
+				return fmt.Errorf("failed to verify the access of userid %s to %s table to update lastmsg due to %w",userId, friendHistTb, err)
+			}
+			if metadata == nil {
+				statusCode = http.StatusNotFound
+				return fmt.Errorf("no history table found under %s", friendHistTb)
+			}
+			if userId != metadata.UserId {
+				statusCode = http.StatusUnauthorized
+				return fmt.Errorf("denied accessing history tb %s to update lastmsg, not a friend of user id %s",friendHistTb, userId)
+			}
+			if latestMsg < metadata.LastDeleted || latestMsg < metadata.LastRead ||  latestMsg < metadata.Lastmsg {
+				statusCode = http.StatusBadRequest
+				return fmt.Errorf("falied to update lastmsg since lastmsg index is out of range of hist tb %s", friendHistTb)
+			}
+			return nil
+		}, func(tr trds2.Interface) error {
+			if err := tr.SetLastMsg(ctx, friendHistTb, latestMsg); err != nil {
+				statusCode = http.StatusInternalServerError
+				return fmt.Errorf("failed to set lastmsg of %s in ds2 by %s due to %w", friendHistTb, userId, err)
+			}
+			return nil
+		}, key)
+
+		if err == nil {
+			errCode = hnd.NoError
+			statusCode = http.StatusCreated
+			break
+		} else if err != rds.TxFailedErr {
+			break
+		}
+		if i == mxRetry - 1 {
+			statusCode = http.StatusInternalServerError
+			err = fmt.Errorf("max limit of retrying is exceeded. hence unable to lock the history tb %s to update lastmsg metadata of user id %s", 
+			friendHistTb, userId)
+		}
+	}
+	return hnd.MakeHandlerResponse(err, errCode, statusCode)
+}

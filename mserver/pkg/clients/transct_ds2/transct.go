@@ -53,7 +53,7 @@ func (tr *transctRepo) GetAllMetadata(ctx context.Context, histTb string) (*Hist
 		return nil, err
 	}
 	if len(rawdata) == 0 {
-		return nil, fmt.Errorf("unable to find history table with name %s", histTb)
+		return nil, nil
 	}
 	if len(rawdata) != 6 {
 		return nil, fmt.Errorf("partially cached metadata was found in DS2 for %s", histTb)
@@ -78,6 +78,11 @@ func (tr *transctRepo) GetAllMetadata(ctx context.Context, histTb string) (*Hist
 func (tr *transctRepo) SetLastRead(ctx context.Context, histTb string, lastRead int) error {
 	lastReadStr := strconv.Itoa(lastRead)
 	return tr.transctPipe.HSet(ctx, makeHistoryTbKey(histTb), lastread, lastReadStr)
+}
+
+func (tr *transctRepo) SetLastMsg(ctx context.Context, histTb string, lastMsg int) error {
+	lastMsgStr := strconv.Itoa(lastMsg)
+	return tr.transctPipe.HSet(ctx, makeHistoryTbKey(histTb), lastmsg, lastMsgStr)
 }
 
 // func makeAllHistoryTbKey() string {
