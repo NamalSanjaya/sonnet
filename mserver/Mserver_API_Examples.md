@@ -43,6 +43,7 @@
     
  7. | /ms/set-lastmsg/:userId?hist=myHistTb&latestmsg=1137 | PUT |
     | ---------------------------------------------------- | --- |
-    
-    
+     
+ 8. | /ms/del-msg/:userId?hist=myHistTb&delmsg=4351 | PUT |
+    | --------------------------------------------- | --- |
     
