@@ -43,12 +43,14 @@ func main()  {
 	// DELETE request - ds1
 	router.DELETE("/ms/del-blockuser/:userId", srv.RemoveBlockUserFromDS1)
 
-	// PUT request -ds2
+	// PUT request - ds2
 	router.PUT("/ms/set-newcontact-ds2/:userId", srv.AddNewContactToDS2)
 	router.PUT("/ms/set-lastread/:userId", srv.MoveLastReadInDS2)
 	router.PUT("/ms/set-lastmsg/:userId", srv.UpdateLastMsgInDS2)
 
-	
+	// DELETE request - ds2
+	router.DELETE("/ms/del-msg/:userId", srv.DeleteMsgInDS2)
+
 	fmt.Println("Listen....8000")
 	log.Fatal(http.ListenAndServe(":8000", router))
 }

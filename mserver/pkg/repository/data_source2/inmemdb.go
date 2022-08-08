@@ -15,7 +15,8 @@ import (
 
 const 
 (
-	PrefixDs2   string   = "ds2#"
+	prefixMem  string = "mem#"
+	PrefixDs2  string = "ds2#"
     RegHistTbs string = "reghistorytbs"
 )
 
@@ -81,7 +82,7 @@ func (rdb *redisDbRepo) GetLastMsg(ctx context.Context, histTb string) (int, err
 	return 0, err
 }
 
-func (rdb *redisDbRepo) Watch(ctx context.Context, txFn func(trds2.Interface) error, comtFn func(trds2.Interface) error, key string) error {
+func (rdb *redisDbRepo) Watch(ctx context.Context, txFn func(trds2.Interface) error, comtFn func(trds2.Interface) error, keys ...string) error {
 	return rdb.cmder.Watch(ctx, func(tx *rds.Tx) error {
 		newTransct := trds2.BeginTransct(rdtx.CreateTx(tx))
 		err := txFn(newTransct)
@@ -93,7 +94,7 @@ func (rdb *redisDbRepo) Watch(ctx context.Context, txFn func(trds2.Interface) er
 			return comtFn(newTransct)
 		})
 		return err
-	}, key)
+	}, keys...)
 }
 
 func (rdb *redisDbRepo) MakeAllHistoryTbKey() string {
@@ -102,4 +103,8 @@ func (rdb *redisDbRepo) MakeAllHistoryTbKey() string {
 
 func (rdb *redisDbRepo) MakeHistoryTbKey(histTb string) string {
 	return fmt.Sprintf("%s%s", PrefixDs2, histTb)
+}
+
+func (rdb *redisDbRepo) MakeHistMemKey(histTb string) string {
+	return fmt.Sprintf("%s%s", prefixMem, histTb)
 }

@@ -116,3 +116,15 @@ func (s *Server) UpdateLastMsgInDS2(w http.ResponseWriter, r *http.Request, p ht
 	})
 	mdw.SendResponse(w, &mdw.ResponseMsg{ Err: hres.ErrCode })
 }
+
+func (s *Server) DeleteMsgInDS2(w http.ResponseWriter, r *http.Request, p httprouter.Params){
+	hres := s.ds2h.DeleteMsg(w, r, p)
+	if hres.Err != nil {
+		s.logger.Errorf(hres.Err.Error())
+	}
+	mdw.SetResponseHeaders(w, hres.StatusCode, map[string]string{
+		ContentType: ApplicationJson_Utf8,
+		Date: "" ,
+	})
+	mdw.SendResponse(w, &mdw.ResponseMsg{ Err: hres.ErrCode })
+}

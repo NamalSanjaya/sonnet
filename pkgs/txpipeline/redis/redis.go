@@ -28,3 +28,11 @@ func (tp txPipeliner) Exec(ctx context.Context, key string) error {
 	_, err := tp.txPipeline.Exec(ctx)
 	return err
 }
+
+func (tp txPipeliner) Del(ctx context.Context, keys ...string) error {
+	return tp.txPipeline.Del(ctx, keys...).Err()
+}
+
+func (tp txPipeliner) ZRem(ctx context.Context, key string, members ...string) error {
+	return tp.txPipeline.ZRem(ctx, key, members).Err()
+}
