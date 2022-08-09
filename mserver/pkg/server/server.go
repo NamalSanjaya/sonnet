@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
@@ -126,5 +127,23 @@ func (s *Server) DeleteMsgInDS2(w http.ResponseWriter, r *http.Request, p httpro
 		ContentType: ApplicationJson_Utf8,
 		Date: "" ,
 	})
+	// TODO: don't need a function to sendReponse. do it here. use map[string]interface{}{ Err:0, ... }
 	mdw.SendResponse(w, &mdw.ResponseMsg{ Err: hres.ErrCode })
+}
+
+func (s *Server) LoadMsgsInDS2(w http.ResponseWriter, r *http.Request, p httprouter.Params){
+	data, hres := s.ds2h.LoadMsgs(w, r, p)
+	if hres.Err != nil {
+		s.logger.Errorf(hres.Err.Error())
+	}
+	mdw.SetResponseHeaders(w, hres.StatusCode, map[string]string{
+		ContentType: ApplicationJson_Utf8,
+		Date: "" ,
+	})
+	content := map[string]interface{}{
+		"Err": hres.ErrCode,
+		"msgs": data,
+	}
+	body, _ := json.Marshal(content)
+	w.Write(body)
 }

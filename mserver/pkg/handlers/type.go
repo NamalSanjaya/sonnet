@@ -9,7 +9,7 @@ type HandlerResponse struct {
 }
 
 func MakeHandlerResponse(err error, errCode, statusCode int) *HandlerResponse {
-	return &HandlerResponse{
+	return &HandlerResponse {
 		Err: err, ErrCode: errCode, StatusCode: statusCode,
 	}
 }
@@ -41,4 +41,5 @@ const (
 	FailedUpdateLastMsgDs2 int = 9
 	FailedDeleteMsgDs2     int = 10
 	NoJobToDo              int = 11  // leads to a request ignore
+	FailedMsgsLoad 		   int = 12
 )

@@ -3,14 +3,15 @@ package datasource2
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 
 	rds "github.com/go-redis/redis/v8"
 
+	trds2 "github.com/NamalSanjaya/sonnet/mserver/pkg/clients/transct_ds2"
 	mdw "github.com/NamalSanjaya/sonnet/mserver/pkg/middleware"
 	"github.com/NamalSanjaya/sonnet/pkgs/cache/redis"
 	rdtx "github.com/NamalSanjaya/sonnet/pkgs/tx/redis"
-	trds2 "github.com/NamalSanjaya/sonnet/mserver/pkg/clients/transct_ds2"
 )
 
 const 
@@ -107,4 +108,63 @@ func (rdb *redisDbRepo) MakeHistoryTbKey(histTb string) string {
 
 func (rdb *redisDbRepo) MakeHistMemKey(histTb string) string {
 	return fmt.Sprintf("%s%s", prefixMem, histTb)
+}
+
+func makeMemRowKey(histTb, tmStamp string) string {
+	return fmt.Sprintf("%s%s#%s", prefixMem, histTb, tmStamp)
+}
+
+func (rdb *redisDbRepo) ListMemoryRows(ctx context.Context, histTb string, start, end int) (MemoryRows, error) {
+	memoryRows := MemoryRows{}
+	histMemKey := rdb.MakeHistMemKey(histTb)
+	minScore := fmt.Sprintf("%d", start)
+	mxScore := fmt.Sprintf("%d", end)
+	listTimestamp, err := rdb.cmder.ZRangeByScore(ctx, histMemKey, minScore, mxScore)
+	if err != nil {	
+		return memoryRows, fmt.Errorf("falied to list Memory rows of %s history table due to %w", histTb, err)
+	}
+	for _, timestmp := range listTimestamp {
+		memRowKey := makeMemRowKey(histTb, timestmp)
+		rowData, err := rdb.cmder.LRange(ctx, memRowKey)
+		if err != nil || len(rowData) < 2 {
+			continue
+		}
+		memRow := rdb.prepareMemoryRow(timestmp, rowData[0], rowData[1])
+		if memRow == nil {
+			continue
+		}
+		memoryRows = append(memoryRows, memRow)
+	}
+	return memoryRows, nil
+}
+
+func (rdb *redisDbRepo) prepareMemoryRow(tmStamp, data, size string) *MemoryRow {
+	timestampInt, err := strconv.Atoi(tmStamp)
+	if err != nil {
+		return nil
+	}
+	sizeInt, err := strconv.Atoi(size)
+	if err != nil {
+		return &MemoryRow{Timestamp: timestampInt, Data: "", Size: 0}
+	}
+	return &MemoryRow{Timestamp: timestampInt, Data: data, Size: sizeInt}
+}
+
+// check the equality ToUserId in given history table with given userId
+func (rdb *redisDbRepo) IsSameToUser(ctx context.Context, userId, histTb string) (bool, error) {
+	toUserId, err := rdb.cmder.HGet(ctx, rdb.MakeHistoryTbKey(histTb), userid)
+	if err != nil {
+		return false, fmt.Errorf("unable to get TouserId from history tb %s with %w", histTb, err)
+	}
+	return toUserId == userId, nil
+}
+
+// combine two history tables and arrange them based on thier timestamp
+/* error considerations: timestamp = 0 or data = "" : discard those situations */
+func (rdb *redisDbRepo) CombineHistTbs(mem1, mem2 MemoryRows) MemoryRows {
+	result := append(mem1, mem2...)
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Timestamp > result[j].Timestamp
+	})
+	return result
 }

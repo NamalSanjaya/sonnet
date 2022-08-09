@@ -51,6 +51,9 @@ func main()  {
 	// DELETE request - ds2
 	router.DELETE("/ms/del-msg/:userId", srv.DeleteMsgInDS2)
 
+	// GET request - ds2
+	router.GET("/ms/load-msgs", srv.LoadMsgsInDS2)
+
 	fmt.Println("Listen....8000")
 	log.Fatal(http.ListenAndServe(":8000", router))
 }

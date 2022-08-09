@@ -5,3 +5,12 @@ type HistTbMetadata struct {
 	UserId string
 	Lastmsg, LastRead, LastDeleted, MemSize, State int
 }
+
+// unit of redis in memory DB
+type MemoryRow struct {
+	Timestamp int
+	Data string
+	Size int
+}
+
+type MemoryRows []*MemoryRow

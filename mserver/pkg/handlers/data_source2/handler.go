@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/julienschmidt/httprouter"
 
@@ -307,3 +308,72 @@ func (h *Handler) DeleteMsg(w http.ResponseWriter, r *http.Request, p httprouter
 	}
 	return hnd.MakeHandlerResponse(err, errCode, statusCode)
 }
+
+// TODO: msg data should be stored and store in our caches and databases.
+func (h *Handler) LoadMsgs(w http.ResponseWriter, r *http.Request, p httprouter.Params) (dsrc2.MemoryRows,*hnd.HandlerResponse) {
+	var msgRows dsrc2.MemoryRows
+	ctx := context.Background()
+	userId   := r.URL.Query().Get("userid")
+	toUserId := r.URL.Query().Get("touserid")
+	myHistTb := r.URL.Query().Get("hist")
+	toHistTb := r.URL.Query().Get("tohist")
+
+	if mdw.IsInvalidateUUID(userId) {
+		return msgRows,hnd.MakeHandlerResponse(fmt.Errorf("falied to load msg from ds2 due to invalied owner's user id %s", userId),
+			hnd.FailedMsgsLoad, http.StatusBadRequest)
+	}
+	if mdw.IsInvalidateUUID(toUserId) {
+		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msg from ds2 due to invalied friend's user id %s", toUserId),
+			hnd.FailedMsgsLoad, http.StatusBadRequest)
+	}
+	if mdw.IsInvalidateUUID(myHistTb) {
+		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msg from ds2 due to invalied owner's history Tb %s", myHistTb),
+			hnd.FailedMsgsLoad, http.StatusBadRequest)
+	}
+	if mdw.IsInvalidateUUID(toHistTb) {
+		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msg from ds2 due to invalied friend's history table %s", toHistTb),
+			hnd.FailedMsgsLoad, http.StatusBadRequest)
+	}
+	start, err := strconv.Atoi(r.URL.Query().Get("start")) // `start` timestamp
+	if err != nil {
+		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msg from ds2 of owner %s, friend %s, invalid start timestamp %s due to %w", 
+		userId, toUserId, r.URL.Query().Get("start"), err), hnd.FailedMsgsLoad, http.StatusBadRequest)
+	}
+	end, err := strconv.Atoi(r.URL.Query().Get("end"))   // `end` timestamp
+	if err != nil {
+		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msg from ds2 of owner %s, friend %s, invalid end timestamp %s due to %w", 
+		userId, toUserId, r.URL.Query().Get("end"), err), hnd.FailedMsgsLoad, http.StatusBadRequest)
+	}
+	// check the permission
+	var ok bool
+	ok, err = h.dataSrc2.IsSameToUser(ctx, userId, toHistTb)
+	if err != nil {
+		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msgs since unable to verify the access of %s to history tb %s due to %w",
+		userId, toHistTb, err), hnd.FailedMsgsLoad, http.StatusInternalServerError)
+	}
+	if !ok {
+		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("access denied to history tb %s for %s", toHistTb, userId), 
+		hnd.FailedMsgsLoad, http.StatusUnauthorized)
+	}
+	ok, err = h.dataSrc2.IsSameToUser(ctx, toUserId, myHistTb)
+	if err != nil {
+		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msgs since unable to verify the access of %s to history tb %s due to %w",
+		toUserId, myHistTb, err), hnd.FailedMsgsLoad, http.StatusInternalServerError)
+	}
+	if !ok {
+		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("access denied to history tb %s for %s", myHistTb, toUserId), 
+		hnd.FailedMsgsLoad, http.StatusUnauthorized)
+	}
+
+	myMemRows, err := h.dataSrc2.ListMemoryRows(ctx, myHistTb, start, end)
+	if err != nil {
+		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msg from ds2, %w", err),
+		hnd.FailedMsgsLoad, http.StatusInternalServerError)
+	}
+	toUserMemRows, err := h.dataSrc2.ListMemoryRows(ctx, toHistTb, start, end)
+	if err != nil {
+		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msg from ds2, %w", err),
+		hnd.FailedMsgsLoad, http.StatusInternalServerError)
+	}
+	return h.dataSrc2.CombineHistTbs(myMemRows, toUserMemRows), hnd.MakeHandlerResponse(nil, hnd.NoError, http.StatusOK)
+} 

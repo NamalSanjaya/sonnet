@@ -27,7 +27,7 @@ func (t *txer) TxPipelined(ctx context.Context, fn func(p rds.Pipeliner) error) 
 	_, err := t.tx.TxPipelined(ctx, fn)
 	return "", err
 }
-
+// TODO: check this function again
 func (t *txer) ZRangeWithScore(ctx context.Context, key, min, max string, 
 	rev bool, offset, count int) ([]string, error) {
 	return t.tx.ZRangeArgs(ctx, rds.ZRangeArgs{

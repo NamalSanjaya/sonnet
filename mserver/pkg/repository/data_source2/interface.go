@@ -14,4 +14,7 @@ type Interface interface{
 	MakeHistoryTbKey(histTb string) string
 	MakeAllHistoryTbKey() string
 	MakeHistMemKey(histTb string) string
+	ListMemoryRows(ctx context.Context, histTb string, start, end int) (MemoryRows, error)
+	IsSameToUser(ctx context.Context, userId, histTb string) (bool, error)
+	CombineHistTbs(mem1, mem2 MemoryRows) MemoryRows
 }

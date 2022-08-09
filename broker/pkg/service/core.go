@@ -94,7 +94,7 @@ func (c *Core) MoveMemoryRowsToDB(ctx context.Context, histTb string) (int, erro
 	dataStr := ""
 	for i, memRow := range memRows {
 		if i == 0 {
-			dataStr = fmt.Sprintf("(%d,0x%s,%d)", memRow.Timestamp, memRow.Data, memRow.Size)
+			dataStr = fmt.Sprintf("(%d,%s,%d)", memRow.Timestamp, memRow.Data, memRow.Size)
 			continue
 		}
 		dataStr = dataStr + "," + fmt.Sprintf("(%d,0x%s,%d)", memRow.Timestamp, memRow.Data, memRow.Size)
