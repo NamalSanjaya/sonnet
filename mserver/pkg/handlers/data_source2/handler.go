@@ -2,20 +2,20 @@ package ds2_handler
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strconv"
 
+	rds "github.com/go-redis/redis/v8"
 	"github.com/julienschmidt/httprouter"
 
 	trds2 "github.com/NamalSanjaya/sonnet/mserver/pkg/clients/transct_ds2"
 	hnd "github.com/NamalSanjaya/sonnet/mserver/pkg/handlers"
 	mdw "github.com/NamalSanjaya/sonnet/mserver/pkg/middleware"
 	dsrc2 "github.com/NamalSanjaya/sonnet/mserver/pkg/repository/data_source2"
-	rds "github.com/go-redis/redis/v8"
+	fmterr "github.com/NamalSanjaya/sonnet/pkgs/errors"
 )
 
-const mxRetry int = 3
+const mxRetry int = 10
 
 type Handler struct {
 	dataSrc2 dsrc2.Interface
@@ -29,27 +29,28 @@ func (h *Handler) AddNewContact(w http.ResponseWriter, r *http.Request, p httpro
 	ctx := context.Background()
 	userId := p.ByName("userId")
 	newUser := r.URL.Query().Get("userid")
+	ctxInfo := []interface{}{"userId",userId, "newUserId", newUser}
 	if userId == newUser {
-		return hnd.MakeHandlerResponse(fmt.Errorf("userid and new-userid can't be same with user id %s", userId),
-			hnd.FailedCreateNewUsrDS2, http.StatusBadRequest)
+		return hnd.MakeHandlerResponse(fmterr.NewFmtError("userId and new userId can't be same", "Falied to add new contact to owner's DS2",
+		"", nil, ctxInfo...), hnd.FailedCreateNewUsrDS2, http.StatusBadRequest)
 	}
 	if mdw.IsInvalidateUUID(userId) {
-		return hnd.MakeHandlerResponse(fmt.Errorf("falied to create new contact in ds2 due to invalied userid %s", userId),
-			hnd.FailedCreateNewUsrDS2, http.StatusBadRequest)
+		return hnd.MakeHandlerResponse(fmterr.NewFmtError("Invalied userId", "Falied to add new contact to owner's DS2", 
+		"userId is not in correct uuid-v4 format", nil, ctxInfo...), hnd.FailedCreateNewUsrDS2, http.StatusBadRequest)
 	}
-	if mdw.IsInvalidateUUID(newUser) {
-		return hnd.MakeHandlerResponse(fmt.Errorf("falied to create new contact with %s due to invalied new-user id %s", userId, newUser),
-			hnd.FailedCreateNewUsrDS2, http.StatusBadRequest)
+	if mdw.IsInvalidateUUID(newUser) { 
+		return hnd.MakeHandlerResponse(fmterr.NewFmtError("Invalied newUserId", "Falied to add new contact to owner's DS2", 
+		"newUserId is not in correct uuid-v4 format", nil, ctxInfo...), hnd.FailedCreateNewUsrDS2, http.StatusBadRequest)
 	}
 	pairHistTbs, err := mdw.ReadHistTbJson(r)
 	if err != nil {
-		return hnd.MakeHandlerResponse(fmt.Errorf("unable to read HistTb Info from request body due to %w", err),
-			hnd.FailedCreateNewUsrDS2, http.StatusInternalServerError)
+		return hnd.MakeHandlerResponse(fmterr.NewFmtError("Unable to read request body", "Falied to add new contact to owner's DS2", 
+		"Falied to extract histroy tb info", err, ctxInfo...), hnd.FailedCreateNewUsrDS2, http.StatusInternalServerError)
 	}
 	// create history tbs for both users in ds2
 	if err = h.dataSrc2.CreateHistTbs(ctx, userId, newUser, pairHistTbs); err != nil {
-		return hnd.MakeHandlerResponse(fmt.Errorf("unable to create Hist tb for owner %s with new friend %s due to %w",
-			userId, newUser, err), hnd.SomeErrCreateNewUsrDS2, http.StatusInternalServerError)
+		return hnd.MakeHandlerResponse(fmterr.NewFmtError("Unable to create history tb in ds2", "Falied to add new contact to owner's DS2",
+		"", err, ctxInfo...), hnd.SomeErrCreateNewUsrDS2, http.StatusInternalServerError)
 	}
 	return hnd.MakeHandlerResponse(nil, hnd.NoError, http.StatusCreated)
 }
@@ -67,22 +68,23 @@ func (h *Handler) MoveLastRead(w http.ResponseWriter, r *http.Request, p httprou
 	ctx := context.Background()
 	userId := p.ByName("userId")
 	friendHistTb := r.URL.Query().Get("tohist")
+	ctxInfo := []interface{}{"userId", userId, "friendHistoryTb", friendHistTb}
 
 	// userid(`userid`), friend's history tb id(`tohist`) should be in uuid4 format
 	if mdw.IsInvalidateUUID(userId) {
-		return hnd.MakeHandlerResponse(fmt.Errorf("falied to move last-read of %s in ds2 due to invalied userid %s",
-			friendHistTb, userId), hnd.FailedMvLastReadDS2, http.StatusBadRequest)
+		return hnd.MakeHandlerResponse(fmterr.NewFmtError("Invalid userId", "Falied to move last read metadata in DS2", 
+		"userId is not in the correct uuid-v4 format", nil, ctxInfo...), hnd.FailedMvLastReadDS2, http.StatusBadRequest)
 	}
 	if mdw.IsInvalidateUUID(friendHistTb) {
-		return hnd.MakeHandlerResponse(fmt.Errorf("falied to move last-read in ds2 due to invalied history id %s", friendHistTb),
-			hnd.FailedMvLastReadDS2, http.StatusBadRequest)
+		return hnd.MakeHandlerResponse(fmterr.NewFmtError("Invalid friend's userId", "Falied to move last read metadata in DS2", 
+		"friend's userId is not in the correct uuid-v4 format", nil, ctxInfo...), hnd.FailedMvLastReadDS2, http.StatusBadRequest)
 	}
 
 	// check Friend's HistTb[touserid] == userid
 	nxtLastRead, err := mdw.ToInt(r.URL.Query().Get("nxtread"))
 	if err != nil {
-		return hnd.MakeHandlerResponse(fmt.Errorf("failed to move last read of %s in ds2 due to invalid move number %s due to %w",
-			friendHistTb, r.URL.Query().Get("nxtread"), err), hnd.FailedMvLastReadDS2, http.StatusBadRequest)
+		return hnd.MakeHandlerResponse(fmterr.NewFmtError("nxtread query parameter should be a numerical value", "Falied to move last read metadata in DS2",
+		"next lastread value is not a number", err, ctxInfo...), hnd.FailedMvLastReadDS2, http.StatusBadRequest)
 	}
 
 	// begin tx with watch
@@ -95,28 +97,31 @@ func (h *Handler) MoveLastRead(w http.ResponseWriter, r *http.Request, p httprou
 			if err != nil {
 				errCode = hnd.FailedMvLastReadDS2
 				statusCode = http.StatusInternalServerError
-				return fmt.Errorf("failed to verify the access of userid %s to %s table to move lastread due to %w", userId, friendHistTb, err)
+				return fmterr.NewFmtError("Unable to verify the access to friend's HistTb", "Falied to move last read metadata in DS2", 
+				"Falied to get metadata from friend's HistTb from DS2", err, append(ctxInfo, "Watch-Retry", i)...)
 			}
 			if metadata == nil {
 				statusCode = http.StatusNotFound
-				return fmt.Errorf("no history table found under %s", friendHistTb)
+				return fmterr.NewFmtError("No history tb found", "Falied to move last read metadata in DS2", "", nil, append(ctxInfo, "Watch-Retry", i)...)
 			}
 			if userId != metadata.UserId {
 				errCode = hnd.FailedMvLastReadDS2
 				statusCode = http.StatusUnauthorized
-				return fmt.Errorf("denied accessing history tb %s to move lastread, not a friend of user id %s", friendHistTb, userId)
+				return fmterr.NewFmtError("Access denied to history table", "Falied to move last read metadata in DS2", 
+				"Friend's History tb toUserId is not equal to owner's UserId", nil, append(ctxInfo, "Watch-Retry", i)...)
 			}
 			if nxtLastRead < metadata.LastDeleted || nxtLastRead < metadata.LastRead || nxtLastRead > metadata.Lastmsg {
 				errCode = hnd.FailedMvLastReadDS2
 				statusCode = http.StatusBadRequest
-				return fmt.Errorf("falied to update lastmsg due to last read msg index is out of range of hist tb %s", friendHistTb)
+				return fmterr.NewFmtError("nxtread is in wrong range", "Falied to move last read metadata in DS2", "", nil, 
+				append(ctxInfo, "nxtLastRead", nxtLastRead, "lastdeleted", metadata.LastDeleted, "lastread", metadata.LastRead, "lastmsg", metadata.Lastmsg ,"Watch-Retry", i)...)
 			}
 			return nil
 		}, func(tr trds2.Interface) error {
 			if err := tr.SetLastRead(ctx, friendHistTb, nxtLastRead); err != nil {
 				errCode = hnd.FailedMvLastReadDS2
 				statusCode = http.StatusInternalServerError
-				return fmt.Errorf("failed to set lastread metadata of %s in ds2 by %s due to %w", friendHistTb, userId, err)
+				return fmterr.NewFmtError("Falied to set lastread in ds2", "Falied to move last read metadata in DS2", "", err, append(ctxInfo, "Watch-Retry", i)...)
 			}
 			return nil
 		}, key)
@@ -131,8 +136,7 @@ func (h *Handler) MoveLastRead(w http.ResponseWriter, r *http.Request, p httprou
 		if i == mxRetry-1 {
 			errCode = hnd.FailedMvLastReadDS2
 			statusCode = http.StatusInternalServerError
-			err = fmt.Errorf("max limit of retrying is exceeded. hence unable to lock the history tb %s to move lastread metadata of user id %s",
-				friendHistTb, userId)
+			err = fmterr.NewFmtError("Unable to lock history tb", "Falied to move last read metadata in DS2", "Max limit of retrying is exceeded", nil, ctxInfo...)
 		}
 	}
 	return hnd.MakeHandlerResponse(err, errCode, statusCode)
@@ -142,21 +146,21 @@ func (h *Handler) UpdateLastMsg(w http.ResponseWriter, r *http.Request, p httpro
 	ctx := context.Background()
 	userId := p.ByName("userId")
 	myHistTb := r.URL.Query().Get("hist")
-
+	ctxInfo := []interface{}{"UserId", userId, "myHistTb", myHistTb}
 	// userid(`userid`), my history tb id(`hist`) should be in uuid4 format
 	if mdw.IsInvalidateUUID(userId) {
-		return hnd.MakeHandlerResponse(fmt.Errorf("falied to update lastmsg of %s in ds2 due to invalied userid %s",
-			myHistTb, userId), hnd.FailedUpdateLastMsgDs2, http.StatusBadRequest)
+		return hnd.MakeHandlerResponse(fmterr.NewFmtError("Invalid userId", "Falied to update last msg metadata in DS2", 
+		"userId is not in the correct uuid-v4 format", nil, ctxInfo...), hnd.FailedUpdateLastMsgDs2, http.StatusBadRequest)
 	}
 	if mdw.IsInvalidateUUID(myHistTb) {
-		return hnd.MakeHandlerResponse(fmt.Errorf("falied to update lastmsg in ds2 due to invalied history id %s", myHistTb),
-			hnd.FailedUpdateLastMsgDs2, http.StatusBadRequest)
+		return hnd.MakeHandlerResponse(fmterr.NewFmtError("Invalid History tb", "Falied to update last msg metadata in DS2", 
+		"myHistTb is not in the correct uuid-v4 format", nil, ctxInfo...), hnd.FailedUpdateLastMsgDs2, http.StatusBadRequest)
 	}
 
 	latestMsg, err := mdw.ToInt(r.URL.Query().Get("latestmsg"))
 	if err != nil {
-		return hnd.MakeHandlerResponse(fmt.Errorf("failed to update lastmsg of %s in ds2 due to invalid lastmsg number %s due to %w",
-			myHistTb, r.URL.Query().Get("latestmsg"), err), hnd.FailedUpdateLastMsgDs2, http.StatusBadRequest)
+		return hnd.MakeHandlerResponse(fmterr.NewFmtError("latestmsg query param should be a numerical value", "Falied to update last msg metadata in DS2",
+		"", err, append(ctxInfo, "lastestmsg", r.URL.Query().Get("latestmsg"))), hnd.FailedUpdateLastMsgDs2, http.StatusBadRequest)
 	}
 
 	// begin tx with watch
@@ -168,21 +172,24 @@ func (h *Handler) UpdateLastMsg(w http.ResponseWriter, r *http.Request, p httpro
 			metadata, err := tr.GetAllMetadata(ctx, myHistTb)
 			if err != nil {
 				statusCode = http.StatusInternalServerError
-				return fmt.Errorf("failed to verify the access of userid %s to %s table to update lastmsg due to %w", userId, myHistTb, err)
+				return fmterr.NewFmtError("Unable to verify the access to History tb", "Falied to update last msg metadata in DS2", 
+				"", err, append(ctxInfo, "Watch-Retry", i)...)
 			}
 			if metadata == nil {
 				statusCode = http.StatusNotFound
-				return fmt.Errorf("no history table found under %s", myHistTb)
+				return fmterr.NewFmtError("No history table found", "Falied to update last msg metadata in DS2", "", nil, append(ctxInfo, "Watch-Retry", i)...)
 			}
 			if latestMsg < metadata.LastDeleted || latestMsg < metadata.LastRead || latestMsg < metadata.Lastmsg {
 				statusCode = http.StatusBadRequest
-				return fmt.Errorf("falied to update lastmsg since lastmsg index is out of range of hist tb %s", myHistTb)
+				return fmterr.NewFmtError("latestMsg is in wrong range", "Falied to update last msg metadata in DS2", "", nil, 
+				append(ctxInfo, "latestMsg", latestMsg, "lastdeleted", metadata.LastDeleted, "lastread", metadata.LastRead, "lastmsg", metadata.Lastmsg ,"Watch-Retry", i)...)
 			}
 			return nil
 		}, func(tr trds2.Interface) error {
 			if err := tr.SetLastMsg(ctx, myHistTb, latestMsg); err != nil {
 				statusCode = http.StatusInternalServerError
-				return fmt.Errorf("failed to set lastmsg of %s in ds2 by %s due to %w", myHistTb, userId, err)
+				return fmterr.NewFmtError("Falied to set lastmsg in history tb in ds2", "Falied to update last msg metadata in DS2", "", 
+				err, append(ctxInfo, "Watch-Retry", i)...)
 			}
 			return nil
 		}, key)
@@ -196,8 +203,7 @@ func (h *Handler) UpdateLastMsg(w http.ResponseWriter, r *http.Request, p httpro
 		}
 		if i == mxRetry-1 {
 			statusCode = http.StatusInternalServerError
-			err = fmt.Errorf("max limit of retrying is exceeded. hence unable to lock the history tb %s to update lastmsg metadata of user id %s",
-				myHistTb, userId)
+			err = fmterr.NewFmtError("Unable to lock history tb", "Falied to update last msg metadata in DS2", "Max limit of retrying is exceeded", nil, ctxInfo...)
 		}
 	}
 	return hnd.MakeHandlerResponse(err, errCode, statusCode)
@@ -207,22 +213,22 @@ func (h *Handler) DeleteMsg(w http.ResponseWriter, r *http.Request, p httprouter
 	ctx := context.Background()
 	userId := p.ByName("userId")
 	myHistTb := r.URL.Query().Get("hist")
-
-	// userid(`userid`), my history tb id(`hist`) should be in uuid4 format
+	ctxInfo := []interface{}{"userId", userId, "myHistTb", myHistTb}
 	if mdw.IsInvalidateUUID(userId) {
-		return hnd.MakeHandlerResponse(fmt.Errorf("falied to delete msg in %s in ds2 due to invalied userid %s",
-			myHistTb, userId), hnd.FailedDeleteMsgDs2, http.StatusBadRequest)
+		return hnd.MakeHandlerResponse(fmterr.NewFmtError("Invalid UserId", "Falied to delete given msg from memory", "userId is not in correct uuid-v4 format", 
+		nil, ctxInfo...), hnd.FailedDeleteMsgDs2, http.StatusBadRequest)
 	}
 	if mdw.IsInvalidateUUID(myHistTb) {
-		return hnd.MakeHandlerResponse(fmt.Errorf("falied to delete msg in ds2 due to invalied history id %s", myHistTb),
-			hnd.FailedDeleteMsgDs2, http.StatusBadRequest)
+		return hnd.MakeHandlerResponse(fmterr.NewFmtError("Invalid History table", "Falied to delete given msg from memory", 
+		"History table is not in correct uuid-v4 format", nil, ctxInfo...), hnd.FailedDeleteMsgDs2, http.StatusBadRequest)
 	}
 
 	delMsg, err := mdw.ToInt(r.URL.Query().Get("delmsg")) // timestamp of msg
 	if err != nil {
-		return hnd.MakeHandlerResponse(fmt.Errorf("failed to delete msg in %s of ds2 due to invalid delete msg index %s due to %w",
-			myHistTb, r.URL.Query().Get("delmsg"), err), hnd.FailedDeleteMsgDs2, http.StatusBadRequest)
+		return hnd.MakeHandlerResponse(fmterr.NewFmtError("delmsg should be a numerical value", "Falied to delete given msg from memory",
+		"", err, append(ctxInfo, "delmsg", r.URL.Query().Get("delmsg"))), hnd.FailedDeleteMsgDs2, http.StatusBadRequest)
 	}
+	ctxInfo = append(ctxInfo, "delMsg", delMsg)
 
 	// begin tx with watch - change ds2 metadata
 	errCode := hnd.FailedDeleteMsgDs2
@@ -236,11 +242,12 @@ func (h *Handler) DeleteMsg(w http.ResponseWriter, r *http.Request, p httprouter
 			metadata, err := tr.GetAllMetadata(ctx, myHistTb)
 			if err != nil {
 				statusCode = http.StatusInternalServerError
-				return fmt.Errorf("failed to verify the access of userid %s to %s table to delete msg due to %w", userId, myHistTb, err)
+				return fmterr.NewFmtError("Unable to verify access to history tb", "Falied to delete given msg from memory",
+				"Falied to get metadata from ds2", err, append(ctxInfo, "Watch-Retry", i))
 			}
 			if metadata == nil {
 				statusCode = http.StatusNotFound
-				return fmt.Errorf("no history table found under %s", myHistTb)
+				return fmterr.NewFmtError("No history tb found", "Falied to delete given msg from memory", "", nil, append(ctxInfo, "Watch-Retry", i))
 			}
 			newLastRead = metadata.LastRead
 			newLastMsg = metadata.Lastmsg
@@ -257,7 +264,8 @@ func (h *Handler) DeleteMsg(w http.ResponseWriter, r *http.Request, p httprouter
 				unWatch = false
 				if newLastRead, err = tr.GetAdjacentTimeStamp(ctx, myHistTb, metadata.LastDeleted, metadata.LastRead); err != nil {
 					statusCode = http.StatusInternalServerError
-					return fmt.Errorf("failed to get adjacent timestamp to lastread %d due to %w", metadata.LastRead, err)
+					return fmterr.NewFmtError("Unable to get adjacent timestamp to lastread", "Falied to delete given msg from memory", "",
+					err, append(ctxInfo, "lastdeleted", metadata.LastDeleted, "lastread", metadata.LastRead, "Watch-Retry", i))
 				}
 			}
 			if delMsg == metadata.Lastmsg {
@@ -266,19 +274,20 @@ func (h *Handler) DeleteMsg(w http.ResponseWriter, r *http.Request, p httprouter
 				unWatch = false
 				if newLastMsg, err = tr.GetAdjacentTimeStamp(ctx, myHistTb, metadata.LastDeleted, metadata.Lastmsg); err != nil {
 					statusCode = http.StatusInternalServerError
-					return fmt.Errorf("failed to get adjacent timestamp to lastmsg %d due to %w", metadata.Lastmsg, err)
+					return fmterr.NewFmtError("Failed to get adjacent timestamp to lastmsg", "Falied to delete given msg from memory", "",
+					err, append(ctxInfo, "lastdeleted", metadata.LastDeleted, "lastmsg", metadata.Lastmsg, "Watch-Retry", i))
 				}
 			}
 			var rowSize int
 			if rowSize, err = tr.GetMemRowSize(ctx, myHistTb, delMsg); err != nil {
 				statusCode = http.StatusInternalServerError
-				return err
+				return fmterr.NewFmtError("Unable to get memory row size", "Falied to delete given msg from memory", "", err, append(ctxInfo, "Watch-Retry", i))
 			}
 			newMemSize = newMemSize - rowSize
 			if newMemSize < 0 {
 				statusCode = http.StatusInternalServerError
-				return fmt.Errorf("memory row size %d or ds2 total memory size %d of histTb %s at %d timestamp is in a wrong state",
-				rowSize, newMemSize+rowSize, myHistTb, delMsg)
+				return fmterr.NewFmtError("Memory row size for given timestamp or ds2 total memory size is in wrong state", "Falied to delete given msg from memory",
+				"calculated total memory is a negative value", nil, append(ctxInfo, "memsizeInDS2", newMemSize+rowSize, "rowSize", rowSize, "Watch-Retry", i))
 			}
 			return nil
 		}, func(tr trds2.Interface) error {
@@ -303,77 +312,80 @@ func (h *Handler) DeleteMsg(w http.ResponseWriter, r *http.Request, p httprouter
 		}
 		if i == mxRetry-1 {
 			statusCode = http.StatusInternalServerError
-			err = fmt.Errorf("max limit of retrying is exceeded. hence unable to lock the history tb or memory %s to delete msg of user id %s", myHistTb, userId)
+			err = fmterr.NewFmtError("Unable to lock history tb", "Falied to delete given msg from memory", "Max limit of retrying is exceeded", nil, ctxInfo...)
 		}
 	}
 	return hnd.MakeHandlerResponse(err, errCode, statusCode)
 }
-
+// TODO: msg data should be encrypted.
 // TODO: msg data should be stored and store in our caches and databases.
-func (h *Handler) LoadMsgs(w http.ResponseWriter, r *http.Request, p httprouter.Params) (dsrc2.MemoryRows,*hnd.HandlerResponse) {
+func (h *Handler) LoadMsgs(w http.ResponseWriter, r *http.Request, p httprouter.Params) (dsrc2.MemoryRows, *hnd.HandlerResponse) {
 	var msgRows dsrc2.MemoryRows
 	ctx := context.Background()
 	userId   := r.URL.Query().Get("userid")
 	toUserId := r.URL.Query().Get("touserid")
 	myHistTb := r.URL.Query().Get("hist")
 	toHistTb := r.URL.Query().Get("tohist")
-
+	ctxInfo := []interface{}{"userId", userId, "toUserId", toUserId, "myHistTb", myHistTb, "toUserHistTb", toHistTb}
 	if mdw.IsInvalidateUUID(userId) {
-		return msgRows,hnd.MakeHandlerResponse(fmt.Errorf("falied to load msg from ds2 due to invalied owner's user id %s", userId),
-			hnd.FailedMsgsLoad, http.StatusBadRequest)
+		return msgRows, hnd.MakeHandlerResponse(fmterr.NewFmtError("Invalied userId", "Falied to load msgs for a given range", 
+		"userId is not in the correct uuid-v4 format", nil, ctxInfo...), hnd.FailedMsgsLoad, http.StatusBadRequest)
 	}
 	if mdw.IsInvalidateUUID(toUserId) {
-		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msg from ds2 due to invalied friend's user id %s", toUserId),
-			hnd.FailedMsgsLoad, http.StatusBadRequest)
+		return msgRows, hnd.MakeHandlerResponse(fmterr.NewFmtError("Invalied toUserId", "Falied to load msgs for a given range", 
+		"toUserId is not in the correct uuid-v4 format", nil, ctxInfo...), hnd.FailedMsgsLoad, http.StatusBadRequest)
 	}
 	if mdw.IsInvalidateUUID(myHistTb) {
-		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msg from ds2 due to invalied owner's history Tb %s", myHistTb),
-			hnd.FailedMsgsLoad, http.StatusBadRequest)
+		return msgRows, hnd.MakeHandlerResponse(fmterr.NewFmtError("Owner's history table is invalid", "Falied to load msgs for a given range", 
+		"Owner's history table is not in the correct uuid-v4 format", nil, ctxInfo...), hnd.FailedMsgsLoad, http.StatusBadRequest)
 	}
 	if mdw.IsInvalidateUUID(toHistTb) {
-		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msg from ds2 due to invalied friend's history table %s", toHistTb),
-			hnd.FailedMsgsLoad, http.StatusBadRequest)
+		return msgRows, hnd.MakeHandlerResponse(fmterr.NewFmtError("Friend's history table is invalid", "Falied to load msgs for a given range", 
+		"Friend's history table is not in the correct uuid-v4 format", nil, ctxInfo...), hnd.FailedMsgsLoad, http.StatusBadRequest)
 	}
+
 	start, err := strconv.Atoi(r.URL.Query().Get("start")) // `start` timestamp
 	if err != nil {
-		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msg from ds2 of owner %s, friend %s, invalid start timestamp %s due to %w", 
-		userId, toUserId, r.URL.Query().Get("start"), err), hnd.FailedMsgsLoad, http.StatusBadRequest)
+		return msgRows, hnd.MakeHandlerResponse(fmterr.NewFmtError("Invalied start timestamp", "Falied to load msgs for a given range",
+		"start query parameter should be a numerical value", err, append(ctxInfo, "start", r.URL.Query().Get("start"))...), hnd.FailedMsgsLoad, http.StatusBadRequest)
 	}
 	end, err := strconv.Atoi(r.URL.Query().Get("end"))   // `end` timestamp
 	if err != nil {
-		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msg from ds2 of owner %s, friend %s, invalid end timestamp %s due to %w", 
-		userId, toUserId, r.URL.Query().Get("end"), err), hnd.FailedMsgsLoad, http.StatusBadRequest)
+		return msgRows, hnd.MakeHandlerResponse(fmterr.NewFmtError("Invalied end timestamp", "Falied to load msgs for a given range",
+		"end query parameter should be a numerical value", err, append(ctxInfo, "end", r.URL.Query().Get("end"))...), hnd.FailedMsgsLoad, http.StatusBadRequest)
 	}
+	ctxInfo = append(ctxInfo, "start", start, "end", end)
+
 	// check the permission
 	var ok bool
 	ok, err = h.dataSrc2.IsSameToUser(ctx, userId, toHistTb)
 	if err != nil {
-		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msgs since unable to verify the access of %s to history tb %s due to %w",
-		userId, toHistTb, err), hnd.FailedMsgsLoad, http.StatusInternalServerError)
+		return msgRows, hnd.MakeHandlerResponse(fmterr.NewFmtError("Unable to check owner's permission to access toHistTb", "Falied to load msgs for a given range",
+		"", err, ctxInfo...), hnd.FailedMsgsLoad, http.StatusInternalServerError)
 	}
 	if !ok {
-		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("access denied to history tb %s for %s", toHistTb, userId), 
-		hnd.FailedMsgsLoad, http.StatusUnauthorized)
+		return msgRows, hnd.MakeHandlerResponse(fmterr.NewFmtError("Owner does n't have permission to access toHistTb", "Falied to load msgs for a given range",
+		"toUserId of toHistTb is not equal to owner's Id", nil, ctxInfo...), hnd.FailedMsgsLoad, http.StatusUnauthorized)
 	}
 	ok, err = h.dataSrc2.IsSameToUser(ctx, toUserId, myHistTb)
 	if err != nil {
-		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msgs since unable to verify the access of %s to history tb %s due to %w",
-		toUserId, myHistTb, err), hnd.FailedMsgsLoad, http.StatusInternalServerError)
+		return msgRows, hnd.MakeHandlerResponse(fmterr.NewFmtError("Unable to check friend's permission to access myHistTb", "Falied to load msgs for a given range",
+		"", err, ctxInfo...), hnd.FailedMsgsLoad, http.StatusInternalServerError)
 	}
 	if !ok {
-		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("access denied to history tb %s for %s", myHistTb, toUserId), 
-		hnd.FailedMsgsLoad, http.StatusUnauthorized)
+		return msgRows, hnd.MakeHandlerResponse(fmterr.NewFmtError("friend does n't have permission to access owner's history tb", "Falied to load msgs for a given range",
+		"toUserId of myHistTb is not equal to friend's Id", nil, ctxInfo...), hnd.FailedMsgsLoad, http.StatusUnauthorized)
 	}
 
 	myMemRows, err := h.dataSrc2.ListMemoryRows(ctx, myHistTb, start, end)
 	if err != nil {
-		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msg from ds2, %w", err),
-		hnd.FailedMsgsLoad, http.StatusInternalServerError)
+		return msgRows, hnd.MakeHandlerResponse(fmterr.NewFmtError("Unable to list memory rows of myHistTb", "Falied to load msgs for a given range",
+		"", err, ctxInfo...), hnd.FailedMsgsLoad, http.StatusInternalServerError)
 	}
 	toUserMemRows, err := h.dataSrc2.ListMemoryRows(ctx, toHistTb, start, end)
 	if err != nil {
-		return msgRows, hnd.MakeHandlerResponse(fmt.Errorf("falied to load msg from ds2, %w", err),
-		hnd.FailedMsgsLoad, http.StatusInternalServerError)
+		return msgRows, hnd.MakeHandlerResponse(fmterr.NewFmtError("Unable to list memory rows of toHistTb", "Falied to load msgs for a given range",
+		"", err, ctxInfo...), hnd.FailedMsgsLoad, http.StatusInternalServerError)
 	}
 	return h.dataSrc2.CombineHistTbs(myMemRows, toUserMemRows), hnd.MakeHandlerResponse(nil, hnd.NoError, http.StatusOK)
 } 

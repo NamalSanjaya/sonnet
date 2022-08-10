@@ -4,19 +4,24 @@ import "fmt"
 
 // ContextW should be []interface{"key", "value"}
 type FmtError struct{
-	Impact string
-	Context string
-	Err error
-	ContextInfo interface{}
+	responseMsg string
+	impact string
+	cause string
+	err error
+	contextInfo interface{}
 }
 
-func NewFmtError(contx, impact string, err error, ctxInfo []interface{}) *FmtError{
+func NewFmtError(respMsg, impact, cause string, err error, ctxInfo ...interface{}) *FmtError{
 	return &FmtError{
-		Impact: impact, Context: contx ,Err: err, ContextInfo: ctxInfo,
+		responseMsg: respMsg, impact: impact, cause: cause, err: err, contextInfo: ctxInfo,
 	}
 }
 
 func (er *FmtError) Error() string {
-	return fmt.Sprintf("{ Error: %s, Context: %s, Impact: %s, contextInfo: %v }",
-	er.Err.Error(), er.Context, er.Impact, er.ContextInfo)
+	return fmt.Sprintf("{ Impact: %s, Cause: %s, Error: %v, contextInfo: %v }",
+	er.impact, er.cause, er.err, er.contextInfo)
+}
+
+func (er *FmtError) GetResponseMsg() string {
+	return er.responseMsg
 }
