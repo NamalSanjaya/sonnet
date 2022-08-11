@@ -79,7 +79,7 @@ Response Body
 ```json
 {  
   "Err": 0
-  "FriendUserId" : {
+  "FriendUserId-1" : {
   		    "tx2rx" :  {
 		    		 "histId"   : "5173cb67-652b-46d6-8b4b-342a0eba1cdc",
 				 "LastRead" : 12390
@@ -90,7 +90,7 @@ Response Body
 				"LastRead"  : 6990
 				"Size"      : 1900
 			      }
-		    "userId": "my_friend_Id",
+		    "userId": "FriendUserId-1",
 		    "username": "my_friend_username",
 		    "email" : "friend@mail.com",
 		    "imgId": "someImgId",
@@ -101,6 +101,8 @@ Response Body
 		    	       ]
 		  }
 
+  "FriendUserId-7" : {}
+  "FrndUserId-3"   : {}
 }
 
 ```
