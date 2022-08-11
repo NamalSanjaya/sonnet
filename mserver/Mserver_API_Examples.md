@@ -82,11 +82,12 @@ Response Body
   "FriendUserId-1" : {
   		    "tx2rx" :  {
 		    		 "histId"   : "5173cb67-652b-46d6-8b4b-342a0eba1cdc",
-				 "LastRead" : 12390
+				 "LastMsg"  : 12405
  				 "Size"     : 2048
 				}
   		    "rx2tx" : { 
 		    		"histId"    : "44aed4af-b121-468b-8ac8-499b36a63aa2",
+				"LastMsg"   : 7009
 				"LastRead"  : 6990
 				"Size"      : 1900
 			      }
@@ -94,6 +95,7 @@ Response Body
 		    "username": "my_friend_username",
 		    "email" : "friend@mail.com",
 		    "imgId": "someImgId",
+		    "lastest_updated" : "${max(lastmsg_o, lastmsg_f)}"
 		    "content": [
 		    		 {"Timestamp": 5793, "data": "-----msg-content-----", "Size": 38, "link": "f"},
 		    		 {"Timestamp": 5797, "data": "-----msg-content-----", "Size": 45, "link": "f"},
@@ -106,3 +108,9 @@ Response Body
 }
 
 ```
+**note**
+* order of friend's Ids(most recent ids to the top) important as it imples the which user send msg recently.(we can use `lastest_updated` field to maintain this behaviour
+* lastest_updated - used to sort the friend's chat list. with whom owner recently chat with. calculte from LastMsg field.
+* LastRead - when last read did by the owner.
+* `content.link` use to identify whose data block that is.("o" - owner , "f" - friend)
+* `content` should come in order from backend. latest msgs to the top.(for a friend)
