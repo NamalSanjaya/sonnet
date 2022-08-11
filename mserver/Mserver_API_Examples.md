@@ -71,3 +71,36 @@ Response Body
        ]
   }
  ```
+10. | /ms/load-all-contactnmsgs?userid=myId | GET |
+    | ------------------------------------- | --- |
+
+Response Body
+
+```json
+{  
+  "Err": 0
+  "FriendUserId" : {
+  		    "tx2rx" :  {
+		    		 "histId"   : "5173cb67-652b-46d6-8b4b-342a0eba1cdc",
+				 "LastRead" : 12390
+ 				 "Size"     : 2048
+				}
+  		    "rx2tx" : { 
+		    		"histId"    : "44aed4af-b121-468b-8ac8-499b36a63aa2",
+				"LastRead"  : 6990
+				"Size"      : 1900
+			      }
+		    "userId": "my_friend_Id",
+		    "username": "my_friend_username",
+		    "email" : "friend@mail.com",
+		    "imgId": "someImgId",
+		    "content": [
+		    		 {"Timestamp": 5793, "data": "-----msg-content-----", "Size": 38, "link": "f"},
+		    		 {"Timestamp": 5797, "data": "-----msg-content-----", "Size": 45, "link": "f"},
+		    		 {"Timestamp": 6041, "data": "-----msg-content-----", "Size": 18, "link": "o"},
+		    	       ]
+		  }
+
+}
+
+```
