@@ -71,8 +71,9 @@ Response Body
        ]
   }
  ```
-10. | /ms/load-all-contactnmsgs?userid=myId | GET |
-    | ------------------------------------- | --- |
+#### 10 
+  | /ms/load-all-contactnmsgs?userid=myId | GET |
+  | ------------------------------------- | --- |
 
 Response Body
 
@@ -96,6 +97,7 @@ Response Body
 		    "email" : "friend@mail.com",
 		    "imgId": "someImgId",
 		    "lastest_updated" : "${max(lastmsg_o, lastmsg_f)}"
+		    "loaded_upto" : "min_timestamp_loaded_send_to_frontend"
 		    "content": [
 		    		 {"Timestamp": 5793, "data": "-----msg-content-----", "Size": 38, "link": "f"},
 		    		 {"Timestamp": 5797, "data": "-----msg-content-----", "Size": 45, "link": "f"},
@@ -114,3 +116,4 @@ Response Body
 * LastRead - when last read did by the owner.
 * `content.link` use to identify whose data block that is.("o" - owner , "f" - friend)
 * `content` should come in order from backend. latest msgs to the top.(for a friend)
+* `loaded_upto` min timestamp loaded to UI. we need to fetch from here onward from backend when it need more past msgs.
