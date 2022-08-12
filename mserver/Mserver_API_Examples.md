@@ -74,8 +74,43 @@ Response Body
 #### 10 
   | /ms/load-all-contactnmsgs?userid=myId | GET |
   | ------------------------------------- | --- |
-
-Response Body
+  
+  ```json
+  {
+    "Err": 0
+    "FriendUserId-1" : { 
+     	  		"tx2rx" : {
+		    		 	"histId"   : "5173cb67-652b-46d6-8b4b-342a0eba1cdc",
+				 	"LastMsg"  : 12405
+ 				 	"Size"     : 2048
+					"endId"    : 10231
+			          },
+  		    	"rx2tx" : { 
+		    			"histId"    : "44aed4af-b121-468b-8ac8-499b36a63aa2",
+					"LastMsg"   : 7009
+					"LastRead"  : 6990
+					"Size"      : 1900
+					"endId"     : 6512
+			      	  },
+			"userId" : "FriendUserId-1",
+			"lastest_updated" : "${max(lastmsg_o, lastmsg_f)}",
+ 		        "content" : [
+		    			{"Timestamp": 5793, "data": "-----msg-content-----", "Size": 38, "link": "f"},
+		    		 	{"Timestamp": 5797, "data": "-----msg-content-----", "Size": 45, "link": "f"},
+		    		 	{"Timestamp": 6041, "data": "-----msg-content-----", "Size": 18, "link": "o"},
+		    	           ]
+     },
+     "FriendUserId-5" : {},
+     "FriendUserId-7" : {},
+ 
+  }
+  ```
+  **note**
+  * `endId` need to track the last msg id in content. we can fetch starting from endId from db.
+  
+  
+TODO: once `admin-server` added remove this to its API document
+Response Body (this is for /load-all-contactnmsgs by `admin-server` response to frontend)
 
 ```json
 {  
