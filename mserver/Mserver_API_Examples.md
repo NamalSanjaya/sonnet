@@ -50,7 +50,7 @@ Request body
  8. | /ms/del-msg/:userId?hist=myHistTb&delmsg=4351 | PUT |
     | --------------------------------------------- | --- |
     
- 9. | /ms/load-msg?userid=myId&touserid=friendId&hist=myHistTb&tohist=toHistTb&start=1025&end=1457 | GET |
+ 9. | /ms/load-msgs?userid=myId&touserid=friendId&hist=myHistTb&tohist=toHistTb&start=1025&end=1457 | GET |
     | -------------------------------------------------------------------------------------------- | --- |
     
 Response Body
@@ -81,24 +81,31 @@ Response Body
     "FriendUserId-1" : { 
      	  		"tx2rx" : {
 		    		 	"histId"   : "5173cb67-652b-46d6-8b4b-342a0eba1cdc",
-				 	"LastMsg"  : 12405
- 				 	"Size"     : 2048
-					"endId"    : 10231
+				 	"lastMsg" : 12405
+ 				 	"size"     : 2048
+					"content"  :  [
+		    					{"Timestamp": 4793, "data": "-----msg-content-----", "Size": 38, "link": "o"},
+		    		 			{"Timestamp": 5797, "data": "-----msg-content-----", "Size": 45, "link": "o"},
+		    		 			{"Timestamp": 6141, "data": "-----msg-content-----", "Size": 18, "link": "o"},
+		    	           		      ]
 			          },
   		    	"rx2tx" : { 
-		    			"histId"    : "44aed4af-b121-468b-8ac8-499b36a63aa2",
-					"LastMsg"   : 7009
-					"LastRead"  : 6990
-					"Size"      : 1900
-					"endId"     : 6512
+		    			"histId"   : "44aed4af-b121-468b-8ac8-499b36a63aa2",
+					"lastMsg"   : 7009,
+					"lastRead"  : 6990,
+					"size"      : 1900,
+				 	"content" : [
+		    					{"Timestamp": 5793, "data": "-----msg-content-----", "Size": 38, "link": "f"},
+		    		 			{"Timestamp": 5799, "data": "-----msg-content-----", "Size": 45, "link": "f"},
+		    		 			{"Timestamp": 7041, "data": "-----msg-content-----", "Size": 18, "link": "f"},
+		    	           		    ]
 			      	  },
 			"userId" : "FriendUserId-1",
-			"lastest_updated" : "${max(lastmsg_o, lastmsg_f)}",
- 		        "content" : [
-		    			{"Timestamp": 5793, "data": "-----msg-content-----", "Size": 38, "link": "f"},
-		    		 	{"Timestamp": 5797, "data": "-----msg-content-----", "Size": 45, "link": "f"},
-		    		 	{"Timestamp": 6041, "data": "-----msg-content-----", "Size": 18, "link": "o"},
-		    	           ]
+			"lastestUpdated" : "${max(lastmsg_o, lastmsg_f)}",
+			"dbFetchInfo" : {
+					   "link": "${tx2rx OR rx2tx}",
+					   "lastTimestamp": 6789
+					 }
      },
      "FriendUserId-5" : {},
      "FriendUserId-7" : {},
@@ -106,7 +113,9 @@ Response Body
   }
   ```
   **note**
-  * `endId` need to track the last msg id in content. we can fetch starting from endId from db.
+  * `dbFetchInfo`: at the admin server next call goes to Identity server(help to fetch msg content from  db). What we need to fetch informations are included here.
+  * `link` : This has the HistId of highest lastDeleted timestamp(other histTb). This need to fetch content from db.
+  * `lastTimestamp` : how far timestamp need to fetch from db. 
   
   
 TODO: once `admin-server` added remove this to its API document
