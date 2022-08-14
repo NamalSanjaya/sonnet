@@ -8,9 +8,9 @@ type HistTbMetadata struct {
 
 // unit of redis in memory DB
 type MemoryRow struct {
-	Timestamp int
-	Data string
-	Size int
+	Timestamp int  `json:"timestamp"`
+	Data string    `json:"data"`
+	Size int       `json:"size"`
 }
 
 type MemoryRows []*MemoryRow

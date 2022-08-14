@@ -17,7 +17,7 @@ type Interface interface{
 	HSet(ctx context.Context, key string, values ...string) error
 	HGet(ctx context.Context,key, field string) (string, error)
 	HDel(ctx context.Context, key string, fields ...string) error
-	HMGet(ctx context.Context, key string, fields ...string)([]interface{}, error)
+	HMGet(ctx context.Context, key string, fields ...string)([]string, error)
 	HVals(ctx context.Context, key string)([]string,error)
 	ZRemRangeByScore(ctx context.Context, key, min, max string) error
 	ZRangeByScore(ctx context.Context, key string, minScore, maxScore string) ([]string, error)
@@ -27,4 +27,5 @@ type Interface interface{
 	SSet(ctx context.Context, key string, value ...string) error
 	Watch(ctx context.Context, txFn func(*rds.Tx) error , keys ...string) error
 	MakeTxPipeliner() rds.Pipeliner
+	ZRangeWithScore(ctx context.Context, key, min, max string, rev bool, offset, count int) ([]string, error)
 }

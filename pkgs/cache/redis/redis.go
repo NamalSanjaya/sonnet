@@ -68,8 +68,20 @@ func (rc *client) HDel(ctx context.Context, key string, fields ...string) error 
 	return rc.client.HDel(ctx, key, fields...).Err()
 }
 
-func (rc *client) HMGet(ctx context.Context, key string, fields ...string)([]interface{}, error) {
-	return rc.client.HMGet(ctx, key, fields...).Result()
+func (rc *client) HMGet(ctx context.Context, key string, fields ...string)([]string, error) {
+	var result []string
+	values, err := rc.client.HMGet(ctx, key, fields...).Result()
+	if err != nil {
+		return result, err
+	}
+	for _,val := range values {
+		if val == nil {
+			result = append(result, "")
+		} else {
+			result = append(result, val.(string))
+		}
+	}
+	return result, nil
 }
 
 func (rc *client) HVals(ctx context.Context, key string)([]string,error) {
@@ -114,4 +126,12 @@ func (rc *client) Watch(ctx context.Context, txFn func(*rds.Tx) error , keys ...
 
 func (rc *client) MakeTxPipeliner() rds.Pipeliner {
 	return rc.client.TxPipeline()
+}
+
+func (rc *client) ZRangeWithScore(ctx context.Context, key, min, max string, 
+	rev bool, offset, count int) ([]string, error) {
+	return rc.client.ZRangeArgs(ctx, rds.ZRangeArgs{
+		Key: key, Start: min, Stop: max, ByScore: true, ByLex: false, 
+		Rev: rev, Offset: int64(offset), Count: int64(count),
+	}).Result()
 }

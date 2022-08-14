@@ -2,6 +2,7 @@ package datasource2
 
 import ( 
 	"context" 
+	
 	mdw "github.com/NamalSanjaya/sonnet/mserver/pkg/middleware"
 	trds2 "github.com/NamalSanjaya/sonnet/mserver/pkg/clients/transct_ds2"
 )
@@ -14,7 +15,9 @@ type Interface interface{
 	MakeHistoryTbKey(histTb string) string
 	MakeAllHistoryTbKey() string
 	MakeHistMemKey(histTb string) string
-	ListMemoryRows(ctx context.Context, histTb string, start, end int) (MemoryRows, error)
+	ListMemoryRows(ctx context.Context, histTb string, start, end int) (MemoryRows, int, error)
 	IsSameToUser(ctx context.Context, userId, histTb string) (bool, error)
 	CombineHistTbs(mem1, mem2 MemoryRows) MemoryRows
+	GetAllMetadata(ctx context.Context, histTb string) (*HistTbMetadata, error)
+	GetMemoryContent(ctx context.Context, histTb string, minTimestamp, maxTimestamp, expectLoadSz int, isUnRead bool) (MemoryRows, int, error)
 }

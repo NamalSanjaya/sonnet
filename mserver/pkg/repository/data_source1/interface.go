@@ -11,4 +11,5 @@ type Interface interface{
 	AddBlockUser(ctx context.Context, userId, blockedUserId string) error
 	CreateNewContact(ctx context.Context, userId, newUserId string, pairHistTb *mdw.PairHistTb) error
 	RemoveBlockUser(ctx context.Context, userId, rmUserId string) error
+	ListHistTbs(ctx context.Context, userId string)(map[string]*mdw.PairHistTb, error)
 }

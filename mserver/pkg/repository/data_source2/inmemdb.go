@@ -30,6 +30,10 @@ const (
 	state       string   = "state"
 )
 
+const (
+	maxRowsIterations int = 30
+)
+
 type redisDbRepo struct {
 	cmder redis.Interface
 }
@@ -66,7 +70,7 @@ func (rdb *redisDbRepo) GetToUser(ctx context.Context, histTb string) (string, e
 	if err == nil {
 		return id, nil
 	}
-	if err == rds.Nil{
+	if err == rds.Nil {
 		return "", nil
 	}
 	return "", err
@@ -81,6 +85,35 @@ func (rdb *redisDbRepo) GetLastMsg(ctx context.Context, histTb string) (int, err
 		return 0, nil
 	}
 	return 0, err
+}
+
+func (rdb *redisDbRepo) GetAllMetadata(ctx context.Context, histTb string) (*HistTbMetadata, error) {
+	metadata := &HistTbMetadata{}
+	rawdata, err := rdb.cmder.HVals(ctx, rdb.MakeHistoryTbKey(histTb))
+	if err != nil {
+		return nil, err
+	}
+	if len(rawdata) == 0 { // not found
+		return nil, nil
+	}
+	if len(rawdata) != 6 {
+		return nil, fmt.Errorf("partially cached metadata was found in DS2 for %s", histTb)
+	}
+	metadata.UserId = rawdata[0]
+	temp := []int{}
+	for _,elemt := range rawdata[1:] {
+		d, err := strconv.Atoi(elemt)
+		if err != nil {
+			return nil, err
+		}
+		temp = append(temp, d)
+	}
+	metadata.Lastmsg     = temp[0]
+	metadata.LastRead    = temp[1]
+	metadata.LastDeleted = temp[2]
+	metadata.MemSize     = temp[3]
+	metadata.State 		 = temp[4]
+	return metadata, nil
 }
 
 func (rdb *redisDbRepo) Watch(ctx context.Context, txFn func(trds2.Interface) error, comtFn func(trds2.Interface) error, keys ...string) error {
@@ -114,15 +147,16 @@ func makeMemRowKey(histTb, tmStamp string) string {
 	return fmt.Sprintf("%s%s#%s", prefixMem, histTb, tmStamp)
 }
 
-func (rdb *redisDbRepo) ListMemoryRows(ctx context.Context, histTb string, start, end int) (MemoryRows, error) {
+// Memory Content, Fetched total data size
+func (rdb *redisDbRepo) ListMemoryRows(ctx context.Context, histTb string, start, end int) (MemoryRows, int, error) {
 	memoryRows := MemoryRows{}
-	histMemKey := rdb.MakeHistMemKey(histTb)
 	minScore := fmt.Sprintf("%d", start)
 	mxScore := fmt.Sprintf("%d", end)
-	listTimestamp, err := rdb.cmder.ZRangeByScore(ctx, histMemKey, minScore, mxScore)
+	listTimestamp, err := rdb.cmder.ZRangeWithScore(ctx, rdb.MakeHistMemKey(histTb), minScore, mxScore, true, 0, -1)
 	if err != nil {	
-		return memoryRows, fmt.Errorf("falied to list Memory rows of %s history table due to %w", histTb, err)
+		return memoryRows, 0, fmt.Errorf("falied to list Memory rows of %s history table due to %w", histTb, err)
 	}
+	var totalMemSz int
 	for _, timestmp := range listTimestamp {
 		memRowKey := makeMemRowKey(histTb, timestmp)
 		rowData, err := rdb.cmder.LRange(ctx, memRowKey)
@@ -133,9 +167,10 @@ func (rdb *redisDbRepo) ListMemoryRows(ctx context.Context, histTb string, start
 		if memRow == nil {
 			continue
 		}
+		totalMemSz += memRow.Size
 		memoryRows = append(memoryRows, memRow)
 	}
-	return memoryRows, nil
+	return memoryRows, totalMemSz, nil
 }
 
 func (rdb *redisDbRepo) prepareMemoryRow(tmStamp, data, size string) *MemoryRow {
@@ -167,4 +202,66 @@ func (rdb *redisDbRepo) CombineHistTbs(mem1, mem2 MemoryRows) MemoryRows {
 		return result[i].Timestamp > result[j].Timestamp
 	})
 	return result
+}
+
+// NOT IN USED, 
+// can fetch upto/beyond `mxSize`.
+// zero timestamp means we don't need to go to db
+func (rdb *redisDbRepo) listMemoryRowsForSize(ctx context.Context, histTb string, maxTimestamp string, mxSize int) (MemoryRows, int, error) {
+	var totalMemSz int
+	var memRows MemoryRows
+	timestamps, err := rdb.cmder.ZRangeWithScore(ctx, rdb.MakeHistMemKey(histTb), "-inf", maxTimestamp, true, 0, maxRowsIterations)
+	if err != nil {
+		return memRows, 0, err
+	}
+	var tmstp string
+	var tmInt int
+	for _, tmstp = range timestamps {
+		memRowKey := makeMemRowKey(histTb, tmstp)
+		rowData, err := rdb.cmder.LRange(ctx, memRowKey)
+		if err != nil || len(rowData) < 2 {
+			continue
+		}
+		memRow := rdb.prepareMemoryRow(tmstp, rowData[0], rowData[1])
+		if memRow == nil {
+			continue
+		}
+		totalMemSz += memRow.Size
+		memRows = append(memRows, memRow)
+		if totalMemSz >= mxSize {
+			tmInt, err = strconv.Atoi(tmstp)
+			if err != nil {
+				return MemoryRows{}, 0, err
+			}
+			return memRows, tmInt, nil
+		}
+	}
+	tmInt, err = strconv.Atoi(tmstp)
+	if err != nil {
+		return MemoryRows{}, 0, err
+	}
+	return memRows, tmInt, nil
+}
+
+// NOT IN USED, 
+// memory rows in lastest one to the top.
+// `lastTimestamp` it obtained from redis-memory
+func(rdb *redisDbRepo) GetMemoryContent(ctx context.Context, histTb string, minTimestamp, maxTimestamp, expectLoadSz int, isUnRead bool) (MemoryRows, int, error) {
+	if isUnRead { // need to get at least `lastDeleted`
+		memRows, size, err := rdb.ListMemoryRows(ctx, histTb, minTimestamp, maxTimestamp) // get memory rows upto `lastdeleted`
+		if err != nil {
+			return MemoryRows{}, 0, err
+		}
+		if expectLoadSz <= size {
+			return memRows, minTimestamp, nil
+		}
+		memRowsAfterDel, lastTimestamp, err := rdb.listMemoryRowsForSize(ctx, histTb, fmt.Sprintf("(%d", minTimestamp), expectLoadSz - size)  // memory rows after last deleted
+		// TODO: log the error
+		if err != nil {
+			return memRows, minTimestamp, nil
+		}
+		memRows = append(memRows, memRowsAfterDel...)
+		return memRows, lastTimestamp, nil
+	}
+	return rdb.listMemoryRowsForSize(ctx, histTb, fmt.Sprintf("(%d", minTimestamp), expectLoadSz) 
 }

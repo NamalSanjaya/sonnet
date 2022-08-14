@@ -53,6 +53,7 @@ func main()  {
 
 	// GET request - ds2
 	router.GET("/ms/load-msgs", srv.LoadMsgsInDS2)
+	router.GET("/ms/load-all-contactnmsgs", srv.LoadAllContactsMsgs)
 
 	fmt.Println("Listen....8000")
 	log.Fatal(http.ListenAndServe(":8000", router))

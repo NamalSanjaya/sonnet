@@ -46,7 +46,7 @@ func (r *redisRepo) SetDs1Metadata(ctx context.Context, userId string, metadata 
 		toUserIdList = append(toUserIdList, toUserId)
 	}
 	// TODO: remove previous list, if exist
-	allHistTbsKey := makeDs1AllHistTbsKey(userId)
+	allHistTbsKey := makeDs1AllUserIdsKey(userId)
 	if err = r.cmder.SSet(ctx, allHistTbsKey, toUserIdList...); err != nil {
 		errList = append(errList, err)
 	}
@@ -64,7 +64,7 @@ func (r *redisRepo) AddBlockUser(ctx context.Context, userId, blockedUserId stri
 
 func (r *redisRepo) CreateNewContact(ctx context.Context, userId, newUserId string, pairHistTb *mdw.PairHistTb) error {
 	var err error
-	allHistTbsKey := makeDs1AllHistTbsKey(userId)
+	allHistTbsKey := makeDs1AllUserIdsKey(userId)
 	if err = r.cmder.SAdd(ctx, allHistTbsKey, newUserId); err != nil {
 		return err
 	}
@@ -77,6 +77,23 @@ func (r *redisRepo) RemoveBlockUser(ctx context.Context, userId, rmUserId string
 	return r.cmder.SRem(ctx, blockListKey, rmUserId)
 }
 
+func (r *redisRepo) ListHistTbs(ctx context.Context, userId string)(map[string]*mdw.PairHistTb, error){
+	histTbs := map[string]*mdw.PairHistTb{}
+	toUserIds, err := r.cmder.SMembers(ctx, makeDs1AllUserIdsKey(userId))
+	if err != nil {
+		return histTbs, err
+	}
+	var pairHistTb []string
+	for _, id := range toUserIds {
+		if pairHistTb, err = r.cmder.HMGet(ctx, makeDs1HistTbKey(userId, id), tx2rx_HistTb, rx2tx_HistTb); err != nil {
+			// TODO: need to collect this error. log at here, don't pass it top(server) layer.
+			continue
+		}
+		histTbs[id] = &mdw.PairHistTb{Tx2Rx_HistTb: pairHistTb[0], Rx2Tx_HistTb: pairHistTb[1]}
+	}
+	return histTbs, nil
+}
+
 func makeDs1InfoKey(usrId string) string {
 	return fmt.Sprintf("%s%s", ds1, usrId)
 }
@@ -85,8 +102,8 @@ func makeDs1BlockUserListKey(usrId string) string {
 	return fmt.Sprintf("%sblockuserlist#%s", ds1, usrId)
 }
 
-func makeDs1AllHistTbsKey(usrId string) string {
-	return fmt.Sprintf("%sallhisttbs#%s", ds1, usrId)
+func makeDs1AllUserIdsKey(usrId string) string {
+	return fmt.Sprintf("%salltouserids#%s", ds1, usrId)
 }
 
 func makeDs1HistTbKey(usrId, toUsrId string) string {

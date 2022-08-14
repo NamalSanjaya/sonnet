@@ -1,6 +1,10 @@
 package handlers
 
-import "fmt"
+import (
+	"fmt"
+
+	ds2repo "github.com/NamalSanjaya/sonnet/mserver/pkg/repository/data_source2"
+)
 
 type HandlerResponse struct {
 	Err        error
@@ -27,6 +31,19 @@ func IsRequestIgnore(err error) bool {
 	return ok
 }
 
+type Info struct {
+	Metadata *ds2repo.HistTbMetadata
+	HistId string
+	Prop string
+}
+
+// for intermidiate calculation. 
+type SmPairHistInfo struct {
+	UserId string  // toUserId
+	TxLink *Info
+	RxLink *Info
+}
+
 // error codes
 const (
 	NoError                int = 0
@@ -42,4 +59,5 @@ const (
 	FailedDeleteMsgDs2     int = 10
 	NoJobToDo              int = 11  // leads to a request ignore
 	FailedMsgsLoad 		   int = 12
+	FaliedListPairHistTbsDS1 int = 13
 )

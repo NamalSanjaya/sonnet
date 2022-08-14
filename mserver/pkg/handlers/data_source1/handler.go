@@ -9,6 +9,7 @@ import (
 
 	mdw "github.com/NamalSanjaya/sonnet/mserver/pkg/middleware"
 	dsrc1 "github.com/NamalSanjaya/sonnet/mserver/pkg/repository/data_source1"
+	fmterr "github.com/NamalSanjaya/sonnet/pkgs/errors"
 	hnd "github.com/NamalSanjaya/sonnet/mserver/pkg/handlers"
 )
 
@@ -111,4 +112,21 @@ func (h *Handler) RemoveBlockUser(w http.ResponseWriter, r *http.Request, p http
 		hnd.FailedRmBlockUserDs1, http.StatusInternalServerError)
 	}
 	return hnd.MakeHandlerResponse(nil, hnd.NoError, http.StatusOK)
+}
+
+// list history table of a user in order in DS1(latest on to the first)
+func (h *Handler) ListHistTbs(r *http.Request) (map[string]*mdw.PairHistTb, *hnd.HandlerResponse) {
+	histTbs := map[string]*mdw.PairHistTb{}
+	var err error
+	ctx := context.Background()
+	userId := r.URL.Query().Get("userid")
+	if mdw.IsInvalidateUUID(userId) {
+		return histTbs, hnd.MakeHandlerResponse(fmterr.NewFmtError("Invalid userId", "Unable to List History tbs", 
+		"owner's userId is not in correct uuid-v4 form", nil, "userId", userId),
+		hnd.FailedRmBlockUserDs1, http.StatusBadRequest) 
+	} 
+	if histTbs, err = h.dataSrc1.ListHistTbs(ctx, userId); err != nil {
+		return histTbs, hnd.MakeHandlerResponse(err, hnd.FaliedListPairHistTbsDS1, http.StatusInternalServerError)
+	}
+	return histTbs, hnd.MakeHandlerResponse(nil, hnd.NoError, http.StatusOK)
 }
